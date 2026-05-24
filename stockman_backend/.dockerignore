@@ -15,4 +15,4 @@ yarn-error.log
 /tests
 docker-compose.yml
 Dockerfile
-docker-entrypoint.sh
+# docker-entrypoint.sh is needed for the Docker image

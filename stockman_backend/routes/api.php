@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EmplacementController;
 use App\Http\Controllers\ProduitController;
@@ -13,4 +14,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/produits', [ProduitController::class, 'index']);
     Route::get('/produits/code/{code}', [ProduitController::class, 'findByCode']);
     Route::patch('/produits/{id}/emplacement', [ProduitController::class, 'assignEmplacement']);
+
+    // Admin routes
+    Route::prefix('admin')->group(function () {
+        Route::get('/users', [AdminController::class, 'users']);
+        Route::post('/users', [AdminController::class, 'storeUser']);
+        Route::put('/users/{id}', [AdminController::class, 'updateUser']);
+        Route::delete('/users/{id}', [AdminController::class, 'destroyUser']);
+
+        Route::get('/products', [AdminController::class, 'products']);
+        Route::post('/products', [AdminController::class, 'storeProduct']);
+        Route::put('/products/{id}', [AdminController::class, 'updateProduct']);
+        Route::delete('/products/{id}', [AdminController::class, 'destroyProduct']);
+
+        Route::get('/emplacements', [AdminController::class, 'emplacements']);
+        Route::post('/emplacements', [AdminController::class, 'storeEmplacement']);
+        Route::put('/emplacements/{id}', [AdminController::class, 'updateEmplacement']);
+        Route::delete('/emplacements/{id}', [AdminController::class, 'destroyEmplacement']);
+
+        Route::post('/products/import', [AdminController::class, 'importProducts']);
+        Route::get('/products/export', [AdminController::class, 'exportProducts']);
+        Route::post('/emplacements/import', [AdminController::class, 'importEmplacements']);
+        Route::get('/emplacements/export', [AdminController::class, 'exportEmplacements']);
+    });
 });

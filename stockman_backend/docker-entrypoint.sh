@@ -1,33 +1,36 @@
 #!/bin/bash
 set -e
 
-# Generate APP_KEY if missing
-if [ -z "$APP_KEY" ]; then
-    if [ ! -f .env ]; then
-        cp .env.example .env
-    fi
-    if ! grep -q "^APP_KEY=base64" .env 2>/dev/null; then
-        php artisan key:generate
-    fi
+cd /var/www/html
+
+if [ ! -f .env ]; then
+    cp .env.example .env
 fi
 
-# Ensure SQLite database file exists and is writable
-if [ "$DB_CONNECTION" = "sqlite" ]; then
+if [ -n "$DB_DATABASE" ]; then
+    mkdir -p "$(dirname "$DB_DATABASE")"
+    chown -R www-data:www-data "$(dirname "$DB_DATABASE")"
     if [ ! -f "$DB_DATABASE" ]; then
         touch "$DB_DATABASE"
-        chown www-data:www-data "$DB_DATABASE"
-        chmod 664 "$DB_DATABASE"
     fi
+    chown www-data:www-data "$DB_DATABASE"
 fi
 
-# Run migrations
-php artisan migrate --force
+chown -R www-data:www-data storage bootstrap/cache
 
-# Cache config/routes/views for production
-if [ "$APP_ENV" = "production" ]; then
-    php artisan config:cache
-    php artisan route:cache
-    php artisan view:cache
+if ! grep -q '^APP_KEY=.\+' .env 2>/dev/null; then
+    php artisan key:generate --force --no-interaction
+fi
+
+php artisan config:cache
+php artisan route:cache
+
+php artisan migrate --force --no-interaction
+
+# Seed if database is empty (no users)
+USER_COUNT=$(php artisan tinker --execute="echo App\Models\User::count();" 2>/dev/null | tail -1)
+if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
+    php artisan db:seed --force --no-interaction
 fi
 
 exec "$@"

@@ -1,57 +1,48 @@
-FROM php:8.3-apache-bookworm
+# Stage 1: Build PHP dependencies and frontend assets
+FROM php:8.4-cli AS build
 
-# Install system dependencies and PHP extensions
 RUN apt-get update && apt-get install -y \
-    libpng-dev \
-    libzip-dev \
-    unzip \
-    libonig-dev \
-    libxml2-dev \
-    curl \
     git \
-    && docker-php-ext-install pdo pdo_sqlite mbstring zip exif pcntl bcmath gd opcache \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    unzip \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Enable Apache modules
-RUN a2enmod rewrite headers
-
-# Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Install Node.js 22.x (for building Laravel Vite assets)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
-    && npm install -g npm@latest
+    && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-WORKDIR /var/www/html
+WORKDIR /app
 
-# Copy composer files and install PHP dependencies
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --optimize-autoloader --no-interaction
-
-# Copy Node package files and install frontend build dependencies
-COPY package.json package-lock.json* ./
-RUN npm install --ignore-scripts
-
-# Copy application code
 COPY . .
 
-# Build Laravel frontend assets (Vite / Tailwind)
-RUN npm run build
+RUN rm -f bootstrap/cache/packages.php bootstrap/cache/services.php \
+    && composer install --no-dev --no-interaction --optimize-autoloader --no-scripts \
+    && npm ci --ignore-scripts \
+    && npm run build
 
-# Set proper permissions for Laravel directories
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/database /var/www/html/public/build 2>/dev/null || true
-RUN chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/database 2>/dev/null || true
+# Stage 2: Runtime
+FROM php:8.4-apache
 
-# Configure Apache DocumentRoot to Laravel public folder
-ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
-RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
-RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+RUN apt-get update && apt-get install -y \
+    libsqlite3-dev \
+    && docker-php-ext-install pdo pdo_sqlite \
+    && docker-php-ext-configure pdo_sqlite \
+    && a2enmod rewrite \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy and set up entrypoint script
+RUN sed -i 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/000-default.conf
+RUN sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
+
+COPY --from=build /app /var/www/html
+
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+WORKDIR /var/www/html
 
 EXPOSE 80
 
