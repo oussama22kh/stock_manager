@@ -1,0 +1,431 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import api from '../services/api'
+
+export default function AdminDashboard() {
+  const [activeTab, setActiveTab] = useState('users')
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingItem, setEditingItem] = useState(null)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [importLoading, setImportLoading] = useState(false)
+
+  const fileInputRef = useRef(null)
+
+  const [formData, setFormData] = useState({})
+
+  const tabConfig = {
+    users: {
+      label: 'Utilisateurs',
+      endpoint: '/admin/users',
+      fields: [
+        { key: 'name', label: 'Nom', type: 'text', required: true },
+        { key: 'email', label: 'Email', type: 'email', required: true },
+        { key: 'username', label: 'Nom d\'utilisateur', type: 'text', required: true },
+        { key: 'password', label: 'Mot de passe', type: 'password', required: (item) => !item },
+        { key: 'role', label: 'Rôle', type: 'select', options: [{ value: 'agent', label: 'Agent' }, { value: 'admin', label: 'Admin' }], required: true },
+      ],
+      columns: [
+        { key: 'name', label: 'Nom' },
+        { key: 'email', label: 'Email' },
+        { key: 'username', label: 'Utilisateur' },
+        { key: 'role', label: 'Rôle' },
+      ],
+      importExport: false,
+    },
+    products: {
+      label: 'Produits',
+      endpoint: '/admin/products',
+      fields: [
+        { key: 'name', label: 'Nom', type: 'text', required: true },
+        { key: 'barcode', label: 'Code-barres', type: 'text', required: true },
+        { key: 'description', label: 'Description', type: 'textarea', required: false },
+      ],
+      columns: [
+        { key: 'name', label: 'Nom' },
+        { key: 'barcode', label: 'Code-barres' },
+        { key: 'description', label: 'Description' },
+      ],
+      importExport: true,
+      importEndpoint: '/admin/products/import',
+      exportEndpoint: '/admin/products/export',
+      templateHeaders: 'name;barcode;description',
+      templateExample: 'Produit A;123456;Description du produit',
+    },
+    emplacements: {
+      label: 'Emplacements',
+      endpoint: '/admin/emplacements',
+      fields: [
+        { key: 'name', label: 'Nom', type: 'text', required: true },
+        { key: 'location', label: 'Localisation', type: 'text', required: false },
+      ],
+      columns: [
+        { key: 'name', label: 'Nom' },
+        { key: 'location', label: 'Localisation' },
+        { key: 'products_count', label: 'Produits' },
+      ],
+      importExport: true,
+      importEndpoint: '/admin/emplacements/import',
+      exportEndpoint: '/admin/emplacements/export',
+      templateHeaders: 'name;location',
+      templateExample: 'Zone A;Entrepôt principal',
+    },
+  }
+
+  const fetchItems = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await api.get(tabConfig[activeTab].endpoint)
+      let data = res.data
+      if (activeTab === 'emplacements') {
+        data = data.map(e => ({ ...e, products_count: e.products?.length || 0 }))
+      }
+      setItems(data)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erreur de chargement')
+    } finally {
+      setLoading(false)
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    fetchItems()
+  }, [fetchItems])
+
+  const resetForm = () => {
+    const defaults = {}
+    tabConfig[activeTab].fields.forEach(f => {
+      defaults[f.key] = f.type === 'select' ? (f.options[0]?.value || '') : ''
+    })
+    setFormData(defaults)
+    setEditingItem(null)
+    setError('')
+  }
+
+  const openAddModal = () => {
+    resetForm()
+    setModalOpen(true)
+  }
+
+  const openEditModal = (item) => {
+    const data = {}
+    tabConfig[activeTab].fields.forEach(f => {
+      data[f.key] = item[f.key] || ''
+    })
+    setFormData(data)
+    setEditingItem(item)
+    setModalOpen(true)
+    setError('')
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setSuccess('')
+
+    const config = tabConfig[activeTab]
+    const payload = { ...formData }
+
+    // Remove empty password on edit
+    if (editingItem && activeTab === 'users' && !payload.password) {
+      delete payload.password
+    }
+
+    try {
+      if (editingItem) {
+        await api.put(`${config.endpoint}/${editingItem.id}`, payload)
+        setSuccess(`${config.label} mis à jour avec succès`)
+      } else {
+        await api.post(config.endpoint, payload)
+        setSuccess(`${config.label} créé avec succès`)
+      }
+      setModalOpen(false)
+      fetchItems()
+    } catch (err) {
+      const msg = err.response?.data?.message
+      if (err.response?.status === 422 && err.response?.data?.errors) {
+        const errors = Object.values(err.response.data.errors).flat().join(', ')
+        setError(errors)
+      } else {
+        setError(msg || 'Une erreur est survenue')
+      }
+    }
+  }
+
+  const handleDelete = async (item) => {
+    if (!confirm(`Supprimer cet élément ?`)) return
+    setError('')
+    setSuccess('')
+    try {
+      await api.delete(`${tabConfig[activeTab].endpoint}/${item.id}`)
+      setSuccess('Supprimé avec succès')
+      fetchItems()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erreur de suppression')
+    }
+  }
+
+  const handleExport = async () => {
+    setError('')
+    try {
+      const config = tabConfig[activeTab]
+      const res = await api.get(config.exportEndpoint, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `${activeTab}_${new Date().toISOString().slice(0, 19).replace(/:/g, '')}.csv`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      setSuccess('Export téléchargé avec succès')
+    } catch (err) {
+      setError('Erreur lors de l\'export')
+    }
+  }
+
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImportLoading(true)
+    setError('')
+    setSuccess('')
+
+    const config = tabConfig[activeTab]
+    const formDataFile = new FormData()
+    formDataFile.append('file', file)
+
+    try {
+      const res = await api.post(config.importEndpoint, formDataFile, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setSuccess(res.data.message)
+      if (res.data.errors?.length > 0) {
+        setError(`Erreurs: ${res.data.errors.join('; ')}`)
+      }
+      fetchItems()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erreur lors de l\'import')
+    } finally {
+      setImportLoading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const downloadTemplate = () => {
+    const config = tabConfig[activeTab]
+    const csvContent = `${config.templateHeaders}\n${config.templateExample}\n`
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `${activeTab}_template.csv`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  const currentConfig = tabConfig[activeTab]
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">Administration</h1>
+        <div className="flex items-center gap-2">
+          {currentConfig.importExport && (
+            <>
+              <button
+                onClick={downloadTemplate}
+                className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
+                title="Télécharger le modèle CSV"
+              >
+                Modèle CSV
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importLoading}
+                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-50"
+              >
+                {importLoading ? 'Import...' : 'Importer CSV'}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleImport}
+                className="hidden"
+              />
+              <button
+                onClick={handleExport}
+                className="px-3 py-2 bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a] text-sm font-medium"
+              >
+                Exporter CSV
+              </button>
+            </>
+          )}
+          <button
+            onClick={openAddModal}
+            className="px-4 py-2 bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a] text-sm font-medium"
+          >
+            + Ajouter
+          </button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm border border-red-200">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm border border-green-200">
+          {success}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 border-b border-gray-200">
+        {Object.entries(tabConfig).map(([key, config]) => (
+          <button
+            key={key}
+            onClick={() => { setActiveTab(key); setError(''); setSuccess('') }}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === key
+                ? 'bg-[#e6eef7] text-[#002f5e] border-b-2 border-[#f86126]'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {config.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div className="text-center py-12 text-gray-400">Chargement...</div>
+      ) : items.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">Aucun élément</div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  {currentConfig.columns.map(col => (
+                    <th key={col.key} className="px-4 py-3 text-left font-medium text-gray-700">
+                      {col.label}
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {items.map(item => (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    {currentConfig.columns.map(col => (
+                      <td key={col.key} className="px-4 py-3 text-gray-700">
+                        {item[col.key] || '—'}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => openEditModal(item)}
+                        className="text-[#f86126] hover:text-[#d94d1a] font-medium mr-3"
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item)}
+                        className="text-red-500 hover:text-red-700 font-medium"
+                      >
+                        Supprimer
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Modal */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h2 className="text-lg font-bold text-gray-800 mb-4">
+                {editingItem ? `Modifier ${currentConfig.label}` : `Ajouter ${currentConfig.label}`}
+              </h2>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {currentConfig.fields.map(field => {
+                  const isRequired = typeof field.required === 'function'
+                    ? field.required(editingItem)
+                    : field.required
+
+                  return (
+                    <div key={field.key}>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {field.label}
+                        {isRequired && <span className="text-[#dc2626]"> *</span>}
+                      </label>
+                      {field.type === 'textarea' ? (
+                        <textarea
+                          value={formData[field.key] || ''}
+                          onChange={e => setFormData({ ...formData, [field.key]: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126] min-h-[80px]"
+                          required={isRequired}
+                        />
+                      ) : field.type === 'select' ? (
+                        <select
+                          value={formData[field.key] || ''}
+                          onChange={e => setFormData({ ...formData, [field.key]: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126]"
+                          required={isRequired}
+                        >
+                          {field.options.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={field.type}
+                          value={formData[field.key] || ''}
+                          onChange={e => setFormData({ ...formData, [field.key]: e.target.value })}
+                          className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126]"
+                          required={isRequired}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setModalOpen(false)}
+                    className="flex-1 py-2 border rounded-lg text-gray-600 hover:bg-gray-50"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a]"
+                  >
+                    {editingItem ? 'Enregistrer' : 'Créer'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

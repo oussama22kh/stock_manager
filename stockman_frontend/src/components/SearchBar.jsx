@@ -18,7 +18,7 @@ export default function SearchBar({ onSearch, placeholder = 'Rechercher...', ini
       value={value}
       onChange={e => setValue(e.target.value)}
       placeholder={placeholder}
-      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126]"
     />
   )
 }

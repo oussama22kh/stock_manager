@@ -3,39 +3,26 @@ services:
     build:
       context: ./stockman_backend
       dockerfile: Dockerfile
-    container_name: stockman_backend
-    restart: unless-stopped
     ports:
       - "8000:80"
     volumes:
-      - ./stockman_backend/database:/var/www/html/database
+      - backend-db:/var/www/html/storage/db
     environment:
-      - APP_NAME=Stockman
-      - APP_ENV=production
-      - APP_DEBUG=false
-      - APP_URL=http://localhost:8000
-      - DB_CONNECTION=sqlite
-      - DB_DATABASE=/var/www/html/database/database.sqlite
-      - SESSION_DRIVER=database
-      - CACHE_STORE=database
-      - QUEUE_CONNECTION=database
-      - LOG_CHANNEL=stderr
-    networks:
-      - stockman
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /var/www/html/storage/db/database.sqlite
+    restart: unless-stopped
 
   frontend:
     build:
       context: ./stockman_frontend
       dockerfile: Dockerfile
-    container_name: stockman_frontend
-    restart: unless-stopped
     ports:
       - "80:80"
     depends_on:
       - backend
-    networks:
-      - stockman
+    restart: unless-stopped
 
-networks:
-  stockman:
-    driver: bridge
+volumes:
+  backend-db:

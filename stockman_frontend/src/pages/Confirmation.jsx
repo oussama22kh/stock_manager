@@ -51,7 +51,7 @@ export default function Confirmation() {
         </div>
         <div>
           <label className="text-sm text-gray-500">Nouvel emplacement</label>
-          <p className="font-semibold text-indigo-600">{selectedEmplacement.name}</p>
+          <p className="font-semibold text-[#002f5e]">{selectedEmplacement.name}</p>
         </div>
 
         {success ? (
@@ -75,7 +75,7 @@ export default function Confirmation() {
               <button
                 onClick={handleConfirm}
                 disabled={loading}
-                className="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                className="flex-1 py-2 bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a] disabled:opacity-50"
               >
                 {loading ? 'Assignation...' : 'Confirmer'}
               </button>
@@ -86,7 +86,7 @@ export default function Confirmation() {
         {success && (
           <button
             onClick={() => navigate('/produits')}
-            className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="w-full py-2 bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a]"
           >
             Retour aux produits
           </button>
