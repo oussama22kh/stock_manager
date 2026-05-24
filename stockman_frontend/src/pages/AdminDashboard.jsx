@@ -50,8 +50,8 @@ export default function AdminDashboard() {
       importExport: true,
       importEndpoint: '/admin/products/import',
       exportEndpoint: '/admin/products/export',
-      templateHeaders: 'name;barcode;description',
-      templateExample: 'Produit A;123456;Description du produit',
+      templateHeaders: 'name,barcode,description',
+      templateExample: 'Produit A,123456,Description du produit',
     },
     emplacements: {
       label: 'Emplacements',
@@ -68,8 +68,8 @@ export default function AdminDashboard() {
       importExport: true,
       importEndpoint: '/admin/emplacements/import',
       exportEndpoint: '/admin/emplacements/export',
-      templateHeaders: 'name;location',
-      templateExample: 'Zone A;Entrepôt principal',
+      templateHeaders: 'name,location',
+      templateExample: 'Zone A,Entrepôt principal',
     },
   }
 
