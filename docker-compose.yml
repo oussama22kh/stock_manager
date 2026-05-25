@@ -3,8 +3,8 @@ services:
     build:
       context: ./stockman_backend
       dockerfile: Dockerfile
-    expose:
-      - "80"
+    ports:
+      - "1234:80"
     volumes:
       - backend-db:/var/www/html/storage/db
     environment:
