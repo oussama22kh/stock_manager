@@ -16,22 +16,27 @@ function BarChart({ data }) {
   return (
     <div className="space-y-3">
       {data.slice(0, 10).map(item => (
-        <div key={item.id} className="flex items-center gap-3">
-          <span className="text-sm text-gray-600 w-32 truncate text-right shrink-0" title={item.name}>
-            {item.name}
-          </span>
-          <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
-            <div
-              className="h-full bg-[#f86126] rounded-full transition-all duration-500 flex items-center justify-end pr-2"
-              style={{ width: `${(item.products_count / max) * 100}%` }}
-            >
-              {item.products_count > max * 0.3 && (
-                <span className="text-xs text-white font-medium">{item.products_count}</span>
-              )}
+        <div key={item.id}>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-600 w-32 truncate text-right shrink-0" title={item.name}>
+              {item.name}
+            </span>
+            <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
+              <div
+                className="h-full bg-[#f86126] rounded-full transition-all duration-500 flex items-center justify-end pr-2"
+                style={{ width: `${(item.products_count / max) * 100}%` }}
+              >
+                {item.products_count > max * 0.3 && (
+                  <span className="text-xs text-white font-medium">{item.products_count}</span>
+                )}
+              </div>
             </div>
+            {item.products_count <= max * 0.3 && (
+              <span className="text-xs text-gray-500 w-8">{item.products_count}</span>
+            )}
           </div>
-          {item.products_count <= max * 0.3 && (
-            <span className="text-xs text-gray-500 w-8">{item.products_count}</span>
+          {item.warehouse_name && (
+            <div className="text-xs text-gray-400 ml-[140px] mt-0.5">{item.warehouse_name}</div>
           )}
         </div>
       ))}
@@ -93,7 +98,7 @@ export default function StatsDashboard() {
           <p className="text-sm text-gray-500 mb-1">Produits totaux</p>
           <p className="text-2xl font-bold text-[#002f5e]">{stats.total_products}</p>
           <p className="text-xs text-gray-400 mt-1">
-            {stats.assigned_products} assignés &middot; {stats.unassigned_products} libres
+            {stats.assigned_products} assignés · {stats.unassigned_products} libres
           </p>
         </div>
 
@@ -108,16 +113,18 @@ export default function StatsDashboard() {
         </div>
 
         <div className="bg-white rounded-xl p-5 border hover:shadow-md transition-shadow">
-          <p className="text-sm text-gray-500 mb-1">Emplacements</p>
+          <p className="text-sm text-gray-500 mb-1">Entrepôts</p>
           <p className="text-2xl font-bold text-[#002f5e]">{stats.total_warehouses}</p>
-          <p className="text-xs text-gray-400 mt-1">zones de stockage</p>
+          <p className="text-xs text-gray-400 mt-1">
+            {stats.total_emplacements} emplacements
+          </p>
         </div>
 
         <div className="bg-white rounded-xl p-5 border hover:shadow-md transition-shadow">
           <p className="text-sm text-gray-500 mb-1">Utilisateurs</p>
           <p className="text-2xl font-bold text-[#002f5e]">{stats.total_users}</p>
           <p className="text-xs text-gray-400 mt-1">
-            {stats.admin_users} admins &middot; {stats.agent_users} agents
+            {stats.admin_users} admins · {stats.agent_users} agents
           </p>
         </div>
       </div>
@@ -127,8 +134,8 @@ export default function StatsDashboard() {
           <h2 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">
             Produits par emplacement
           </h2>
-          {stats.products_per_warehouse.length > 0 ? (
-            <BarChart data={stats.products_per_warehouse} />
+          {stats.products_per_emplacement?.length > 0 ? (
+            <BarChart data={stats.products_per_emplacement} />
           ) : (
             <p className="text-sm text-gray-400 py-4 text-center">Aucun emplacement</p>
           )}
@@ -145,7 +152,10 @@ export default function StatsDashboard() {
                   <div>
                     <span className="font-medium text-gray-800">{a.product_name || '—'}</span>
                     <span className="text-gray-400 mx-1">&rarr;</span>
-                    <span className="text-[#f86126]">{a.warehouse_name || '—'}</span>
+                    <span className="text-[#f86126]">{a.emplacement_name || '—'}</span>
+                    {a.warehouse_name && (
+                      <span className="text-xs text-gray-400 ml-1">({a.warehouse_name})</span>
+                    )}
                   </div>
                   <span className="text-xs text-gray-400">
                     {a.assigned_at ? new Date(a.assigned_at).toLocaleDateString('fr-FR') : '—'}

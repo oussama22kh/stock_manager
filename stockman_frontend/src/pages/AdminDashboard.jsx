@@ -17,6 +17,7 @@ export default function AdminDashboard() {
   const fileInputRef = useRef(null)
 
   const [formData, setFormData] = useState({})
+  const [warehouses, setWarehouses] = useState([])
 
   const tabConfig = {
     users: {
@@ -56,9 +57,9 @@ export default function AdminDashboard() {
       templateHeaders: 'name,barcode,description',
       templateExample: 'Produit A,123456,Description du produit',
     },
-    emplacements: {
-      label: 'Emplacements',
-      endpoint: '/admin/emplacements',
+    warehouses: {
+      label: 'Entrepôts',
+      endpoint: '/admin/warehouses',
       fields: [
         { key: 'name', label: 'Nom', type: 'text', required: true },
         { key: 'location', label: 'Localisation', type: 'text', required: false },
@@ -66,13 +67,29 @@ export default function AdminDashboard() {
       columns: [
         { key: 'name', label: 'Nom' },
         { key: 'location', label: 'Localisation' },
+        { key: 'emplacements_count', label: 'Emplacements' },
+      ],
+      importExport: false,
+    },
+    emplacements: {
+      label: 'Emplacements',
+      endpoint: '/admin/emplacements',
+      fields: [
+        { key: 'warehouse_id', label: 'Entrepôt', type: 'dynamicSelect', required: true },
+        { key: 'name', label: 'Nom', type: 'text', required: true },
+        { key: 'location', label: 'Localisation', type: 'text', required: false },
+      ],
+      columns: [
+        { key: 'warehouse_name', label: 'Entrepôt' },
+        { key: 'name', label: 'Nom' },
+        { key: 'location', label: 'Localisation' },
         { key: 'products_count', label: 'Produits' },
       ],
       importExport: true,
       importEndpoint: '/admin/emplacements/import',
       exportEndpoint: '/admin/emplacements/export',
-      templateHeaders: 'name,location',
-      templateExample: 'Zone A,Entrepôt principal',
+      templateHeaders: 'warehouse_name,name,location',
+      templateExample: 'Entrepôt A,Allée 1 - Étagère A,Bâtiment principal',
     },
   }
 
@@ -87,7 +104,16 @@ export default function AdminDashboard() {
       const res = await api.get(`${tabConfig[activeTab].endpoint}?${params}`)
       const { data, current_page, last_page, total } = res.data
       if (activeTab === 'emplacements') {
-        setItems(data.map(e => ({ ...e, products_count: e.products?.length || 0 })))
+        setItems(data.map(e => ({
+          ...e,
+          products_count: e.products?.length || 0,
+          warehouse_name: e.warehouse?.name || '—',
+        })))
+      } else if (activeTab === 'warehouses') {
+        setItems(data.map(w => ({
+          ...w,
+          emplacements_count: w.emplacements?.length || 0,
+        })))
       } else {
         setItems(data)
       }
@@ -103,6 +129,14 @@ export default function AdminDashboard() {
     fetchItems(1)
   }, [fetchItems])
 
+  useEffect(() => {
+    if (activeTab === 'emplacements') {
+      api.get('/admin/warehouses?per_page=100')
+        .then(res => setWarehouses(res.data.data || res.data))
+        .catch(() => setWarehouses([]))
+    }
+  }, [activeTab])
+
   const handleSearch = useCallback((query) => {
     setSearchQuery(query)
   }, [])
@@ -110,7 +144,11 @@ export default function AdminDashboard() {
   const resetForm = () => {
     const defaults = {}
     tabConfig[activeTab].fields.forEach(f => {
-      defaults[f.key] = f.type === 'select' ? (f.options[0]?.value || '') : ''
+      if (f.type === 'dynamicSelect') {
+        defaults[f.key] = ''
+      } else {
+        defaults[f.key] = f.type === 'select' ? (f.options[0]?.value || '') : ''
+      }
     })
     setFormData(defaults)
     setEditingItem(null)
@@ -488,6 +526,18 @@ export default function AdminDashboard() {
                         >
                           {field.options.map(opt => (
                             <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      ) : field.type === 'dynamicSelect' ? (
+                        <select
+                          value={formData[field.key] || ''}
+                          onChange={e => setFormData({ ...formData, [field.key]: e.target.value })}
+                          className="w-full px-3 py-2 min-h-[44px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126]"
+                          required={isRequired}
+                        >
+                          <option value="">-- Sélectionner --</option>
+                          {warehouses.map(w => (
+                            <option key={w.id} value={w.id}>{w.name}</option>
                           ))}
                         </select>
                       ) : (
