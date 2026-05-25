@@ -1,23 +1,26 @@
-import { Redirect } from 'expo-router';
+import { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useApp } from '../src/context/AppContext';
 
 export default function Index() {
   const { token, isLoading } = useApp();
+  const router = useRouter();
 
-  if (isLoading) {
-    return (
-      <View style={styles.splash}>
-        <ActivityIndicator size="large" color="#f86126" />
-      </View>
-    );
-  }
+  useEffect(() => {
+    if (isLoading) return;
+    if (token) {
+      router.replace('/(tabs)/entrepots');
+    } else {
+      router.replace('/login');
+    }
+  }, [token, isLoading, router]);
 
-  if (token) {
-    return <Redirect href="/(tabs)/emplacements" />;
-  }
-
-  return <Redirect href="/login" />;
+  return (
+    <View style={styles.splash}>
+      <ActivityIndicator size="large" color="#f86126" />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

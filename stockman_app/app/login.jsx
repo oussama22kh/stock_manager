@@ -53,13 +53,13 @@ export default function LoginScreen() {
 
         <View style={styles.form}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>URL de l'API</Text>
+            <Text style={styles.label}>URL de l'API (inclure /api)</Text>
             <TextInput
               style={styles.input}
               value={localApiUrl}
               onChangeText={setLocalApiUrl}
               onBlur={() => setApiUrl(localApiUrl)}
-              placeholder="http://192.168.1.100:1234/api"
+              placeholder="http://10.10.1.125:1234/api"
               placeholderTextColor="#999"
               autoCapitalize="none"
               autoCorrect={false}

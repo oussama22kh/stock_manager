@@ -16,18 +16,29 @@ export default function BarcodeScanner({ onScan }) {
     };
   }, []);
 
-  const handleBarcodeScanned = ({ data }) => {
+  const handleBarcodeScanned = async ({ data }) => {
     if (scannedRef.current) return;
     scannedRef.current = true;
-    setActive(false);
-    onScan(data);
+
+    const keepOpen = await onScan(data);
+
+    if (keepOpen) {
+      setTimeout(() => {
+        scannedRef.current = false;
+      }, 1500);
+    } else {
+      setActive(false);
+    }
   };
 
-  const handleManualSubmit = () => {
+  const handleManualSubmit = async () => {
     if (manualCode.trim()) {
       setShowManual(false);
+      const keepOpen = await onScan(manualCode.trim());
+      if (keepOpen) {
+        setShowManual(true);
+      }
       setManualCode('');
-      onScan(manualCode.trim());
     }
   };
 

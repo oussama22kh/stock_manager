@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Emplacement;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -11,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminController extends Controller
 {
@@ -90,7 +92,7 @@ class AdminController extends Controller
 
     public function products(Request $request): JsonResponse
     {
-        $query = Product::with('warehouses');
+        $query = Product::with('emplacements', 'emplacements.warehouse');
 
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
@@ -147,11 +149,11 @@ class AdminController extends Controller
         return response()->json(['message' => 'Product deleted']);
     }
 
-    // ─── Emplacements (Warehouses) ───
+    // ─── Emplacements ───
 
     public function emplacements(Request $request): JsonResponse
     {
-        $query = Warehouse::with('products');
+        $query = Emplacement::with('warehouse', 'products');
 
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {
@@ -166,24 +168,26 @@ class AdminController extends Controller
     public function storeEmplacement(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'warehouse_id' => 'required|integer|exists:warehouses,id',
             'name' => 'required|string|max:255',
             'location' => 'nullable|string|max:255',
         ]);
 
-        $emplacement = Warehouse::create($validated);
+        $emplacement = Emplacement::create($validated);
 
         return response()->json($emplacement, 201);
     }
 
     public function updateEmplacement(Request $request, int $id): JsonResponse
     {
-        $emplacement = Warehouse::find($id);
+        $emplacement = Emplacement::find($id);
 
         if (! $emplacement) {
             return response()->json(['message' => 'Emplacement not found'], 404);
         }
 
         $validated = $request->validate([
+            'warehouse_id' => 'sometimes|integer|exists:warehouses,id',
             'name' => 'sometimes|string|max:255',
             'location' => 'nullable|string|max:255',
         ]);
@@ -195,7 +199,7 @@ class AdminController extends Controller
 
     public function destroyEmplacement(int $id): JsonResponse
     {
-        $emplacement = Warehouse::find($id);
+        $emplacement = Emplacement::find($id);
 
         if (! $emplacement) {
             return response()->json(['message' => 'Emplacement not found'], 404);
@@ -204,6 +208,65 @@ class AdminController extends Controller
         $emplacement->delete();
 
         return response()->json(['message' => 'Emplacement deleted']);
+    }
+
+    // ─── Warehouses ───
+
+    public function warehouses(Request $request): JsonResponse
+    {
+        $query = Warehouse::with('emplacements');
+
+        if ($search = $request->get('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('location', 'like', "%{$search}%");
+            });
+        }
+
+        return response()->json($query->paginate(20));
+    }
+
+    public function storeWarehouse(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'location' => 'nullable|string|max:255',
+        ]);
+
+        $warehouse = Warehouse::create($validated);
+
+        return response()->json($warehouse, 201);
+    }
+
+    public function updateWarehouse(Request $request, int $id): JsonResponse
+    {
+        $warehouse = Warehouse::find($id);
+
+        if (! $warehouse) {
+            return response()->json(['message' => 'Warehouse not found'], 404);
+        }
+
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'location' => 'nullable|string|max:255',
+        ]);
+
+        $warehouse->update($validated);
+
+        return response()->json($warehouse);
+    }
+
+    public function destroyWarehouse(int $id): JsonResponse
+    {
+        $warehouse = Warehouse::find($id);
+
+        if (! $warehouse) {
+            return response()->json(['message' => 'Warehouse not found'], 404);
+        }
+
+        $warehouse->delete();
+
+        return response()->json(['message' => 'Warehouse deleted']);
     }
 
     // ─── CSV Import / Export ───
@@ -245,6 +308,7 @@ class AdminController extends Controller
 
                 if (empty($name) || empty($barcode)) {
                     $errors[] = "Ligne {$line}: name et barcode sont requis";
+
                     continue;
                 }
 
@@ -307,7 +371,7 @@ class AdminController extends Controller
         return ['created' => count($toInsert)];
     }
 
-    public function exportProducts(): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function exportProducts(): StreamedResponse
     {
         $products = Product::all(['name', 'barcode', 'description']);
 
@@ -335,19 +399,20 @@ class AdminController extends Controller
         $handle = fopen($file->getPathname(), 'r');
         $header = fgetcsv($handle);
 
-        if (! $header || ! in_array('name', $header)) {
+        if (! $header || ! in_array('name', $header) || ! in_array('warehouse_name', $header)) {
             fclose($handle);
 
-            return response()->json(['message' => 'CSV invalide. En-têtes requis: name,location'], 422);
+            return response()->json(['message' => 'CSV invalide. En-têtes requis: warehouse_name,name,location'], 422);
         }
 
         $nameIdx = array_search('name', $header);
         $locIdx = array_search('location', $header);
+        $whIdx = array_search('warehouse_name', $header);
 
+        $warehouseCache = [];
         $created = 0;
         $skipped = 0;
         $errors = [];
-        $batch = [];
         $line = 1;
 
         DB::beginTransaction();
@@ -357,29 +422,41 @@ class AdminController extends Controller
                 $line++;
                 $name = trim($row[$nameIdx] ?? '');
                 $location = $locIdx !== false ? trim($row[$locIdx] ?? '') : null;
+                $whName = trim($row[$whIdx] ?? '');
 
-                if (empty($name)) {
-                    $errors[] = "Ligne {$line}: name est requis";
+                if (empty($name) || empty($whName)) {
+                    $errors[] = "Ligne {$line}: warehouse_name et name sont requis";
+
                     continue;
                 }
 
-                $batch[] = [
+                $key = mb_strtolower($whName);
+                if (! isset($warehouseCache[$key])) {
+                    $wh = Warehouse::where('name', 'like', "%{$whName}%")->first();
+                    $warehouseCache[$key] = $wh?->id;
+                }
+
+                $warehouseId = $warehouseCache[$key];
+
+                if (! $warehouseId) {
+                    $errors[] = "Ligne {$line}: Entrepôt '{$whName}' introuvable";
+
+                    continue;
+                }
+
+                $existing = Emplacement::where('warehouse_id', $warehouseId)->where('name', $name)->exists();
+                if ($existing) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                Emplacement::create([
+                    'warehouse_id' => $warehouseId,
                     'name' => $name,
                     'location' => $location,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-
-                if (count($batch) >= 500) {
-                    $result = $this->flushEmplacementBatch($batch, $skipped);
-                    $created += $result['created'];
-                    $batch = [];
-                }
-            }
-
-            if (! empty($batch)) {
-                $result = $this->flushEmplacementBatch($batch, $skipped);
-                $created += $result['created'];
+                ]);
+                $created++;
             }
 
             DB::commit();
@@ -400,37 +477,16 @@ class AdminController extends Controller
         ]);
     }
 
-    private function flushEmplacementBatch(array $batch, int &$skipped): array
+    public function exportEmplacements(): StreamedResponse
     {
-        $names = array_column($batch, 'name');
-        $existing = Warehouse::whereIn('name', $names)->pluck('name')->map(fn ($v) => strtolower($v))->toArray();
-
-        $toInsert = [];
-        foreach ($batch as $row) {
-            if (in_array(strtolower($row['name']), $existing)) {
-                $skipped++;
-            } else {
-                $toInsert[] = $row;
-            }
-        }
-
-        if (! empty($toInsert)) {
-            Warehouse::insert($toInsert);
-        }
-
-        return ['created' => count($toInsert)];
-    }
-
-    public function exportEmplacements(): \Symfony\Component\HttpFoundation\StreamedResponse
-    {
-        $emplacements = Warehouse::all(['name', 'location']);
+        $emplacements = Emplacement::with('warehouse')->get();
 
         return response()->streamDownload(function () use ($emplacements) {
             $output = fopen('php://output', 'w');
-            fputcsv($output, ['name', 'location']);
+            fputcsv($output, ['warehouse_name', 'name', 'location']);
 
             foreach ($emplacements as $e) {
-                fputcsv($output, [$e->name, $e->location ?? '']);
+                fputcsv($output, [$e->warehouse?->name ?? '', $e->name, $e->location ?? '']);
             }
 
             fclose($output);
@@ -443,21 +499,30 @@ class AdminController extends Controller
     {
         $totalProducts = Product::count();
         $totalWarehouses = Warehouse::count();
+        $totalEmplacements = Emplacement::count();
         $assignedProducts = WarehouseProduct::distinct('product_id')->count('product_id');
         $unassignedProducts = $totalProducts - $assignedProducts;
 
-        $productsPerWarehouse = Warehouse::withCount('products')
+        $productsPerEmplacement = Emplacement::withCount('products')
+            ->with('warehouse')
             ->orderByDesc('products_count')
-            ->get(['id', 'name', 'products_count']);
+            ->get()
+            ->map(fn ($e) => [
+                'id' => $e->id,
+                'name' => $e->name,
+                'warehouse_name' => $e->warehouse?->name,
+                'products_count' => $e->products_count,
+            ]);
 
-        $recentAssignments = WarehouseProduct::with(['product:id,name,barcode', 'warehouse:id,name'])
+        $recentAssignments = WarehouseProduct::with(['product:id,name,barcode', 'emplacement:id,name,warehouse_id', 'emplacement.warehouse:id,name'])
             ->latest('assigned_at')
             ->take(10)
             ->get()
             ->map(fn ($wp) => [
                 'product_name' => $wp->product?->name,
                 'product_barcode' => $wp->product?->barcode,
-                'warehouse_name' => $wp->warehouse?->name,
+                'emplacement_name' => $wp->emplacement?->name,
+                'warehouse_name' => $wp->emplacement?->warehouse?->name,
                 'assigned_at' => $wp->assigned_at,
             ]);
 
@@ -472,7 +537,8 @@ class AdminController extends Controller
             'assigned_products' => $assignedProducts,
             'unassigned_products' => $unassignedProducts,
             'total_warehouses' => $totalWarehouses,
-            'products_per_warehouse' => $productsPerWarehouse,
+            'total_emplacements' => $totalEmplacements,
+            'products_per_emplacement' => $productsPerEmplacement,
             'recent_assignments' => $recentAssignments,
             'recent_products' => $recentProducts,
             'total_users' => $totalUsers,

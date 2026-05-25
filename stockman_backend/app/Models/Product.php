@@ -9,9 +9,9 @@ class Product extends Model
 {
     protected $fillable = ['name', 'barcode', 'description'];
 
-    public function warehouses(): BelongsToMany
+    public function emplacements(): BelongsToMany
     {
-        return $this->belongsToMany(Warehouse::class, 'warehouse_products')
+        return $this->belongsToMany(Emplacement::class, 'warehouse_products', 'product_id', 'emplacement_id')
             ->withPivot(['assigned_by', 'assigned_at'])
             ->withTimestamps();
     }

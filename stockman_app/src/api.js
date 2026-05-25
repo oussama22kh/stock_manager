@@ -16,8 +16,16 @@ export function onUnauthorized(callback) {
   _onUnauthorized = callback;
 }
 
+function normalizeUrl(url) {
+  if (!url) return null;
+  const trimmed = url.trim();
+  const noTrailing = trimmed.replace(/\/+$/, '');
+  if (noTrailing.endsWith('/api')) return noTrailing;
+  return noTrailing + '/api';
+}
+
 export function setBaseUrl(url) {
-  _baseUrl = url;
+  _baseUrl = url ? normalizeUrl(url) : null;
 }
 
 export function getBaseUrl() {

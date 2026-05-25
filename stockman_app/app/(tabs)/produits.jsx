@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 import api from '../../src/api';
 import SearchBar from '../../src/components/SearchBar';
-import BarcodeScanner from '../../src/components/BarcodeScanner';
 
 function SkeletonCard() {
   return (
@@ -16,6 +15,8 @@ function SkeletonCard() {
   );
 }
 
+let _BarcodeScanner = null;
+
 export default function ProduitsScreen() {
   const [filteredProduits, setFilteredProduits] = useState([]);
   const [tab, setTab] = useState('scan');
@@ -24,6 +25,8 @@ export default function ProduitsScreen() {
   const [scanError, setScanError] = useState('');
   const [error, setError] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  const [scannerLoaded, setScannerLoaded] = useState(false);
+  const scanLoadAttempted = useRef(false);
 
   const {
     selectedEmplacement, setSelectedProduit,
@@ -33,11 +36,18 @@ export default function ProduitsScreen() {
 
   useEffect(() => {
     if (!selectedEmplacement) {
-      router.replace('/(tabs)/emplacements');
+      router.replace('/(tabs)/entrepots');
     }
   }, [selectedEmplacement, router]);
 
   useEffect(() => {
+    if (tab === 'scan' && !_BarcodeScanner && !scanLoadAttempted.current) {
+      scanLoadAttempted.current = true;
+      try {
+        _BarcodeScanner = require('../../src/components/BarcodeScanner').default;
+      } catch {}
+      setScannerLoaded(true);
+    }
     if (tab === 'search') {
       setSearchQuery('');
       setFilteredProduits([]);
@@ -62,8 +72,8 @@ export default function ProduitsScreen() {
       cacheProducts(results);
       setFilteredProduits(results);
       setHasSearched(true);
-    } catch {
-      setError('Erreur lors de la recherche');
+    } catch (err) {
+      setError(err.message || 'Erreur lors de la recherche');
     } finally {
       setSearching(false);
     }
@@ -81,11 +91,11 @@ export default function ProduitsScreen() {
     if (cached) {
       if (cached.emplacement_id === selectedEmplacement?.id) {
         setScanError('Ce produit est déjà dans cet emplacement');
-        return;
+        return true;
       }
       setSelectedProduit(cached);
       router.push('/confirmation');
-      return;
+      return false;
     }
 
     try {
@@ -93,12 +103,14 @@ export default function ProduitsScreen() {
       cacheProduct(data);
       if (data.emplacement_id === selectedEmplacement?.id) {
         setScanError('Ce produit est déjà dans cet emplacement');
-        return;
+        return true;
       }
       setSelectedProduit(data);
       router.push('/confirmation');
+      return false;
     } catch {
       setScanError('Produit non trouvé pour ce code-barres');
+      return true;
     }
   };
 
@@ -150,8 +162,14 @@ export default function ProduitsScreen() {
         </View>
       ) : null}
 
-      {tab === 'scan' && (
-        <BarcodeScanner onScan={handleScan} />
+      {tab === 'scan' && _BarcodeScanner && (
+        <_BarcodeScanner onScan={handleScan} />
+      )}
+
+      {tab === 'scan' && !_BarcodeScanner && (
+        <View style={styles.scannerLoading}>
+          <ActivityIndicator size="large" color="#f86126" />
+        </View>
       )}
 
       {tab === 'search' && (
@@ -269,6 +287,11 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     flex: 1,
+  },
+  scannerLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
   },
   skeleton: {
     backgroundColor: '#fff',

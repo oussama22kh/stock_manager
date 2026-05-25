@@ -25,9 +25,9 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="emplacements"
+        name="entrepots"
         options={{
-          title: 'Emplacements',
+          title: 'Entrepôts',
           tabBarIcon: ({ focused }) => <TabIcon label="🏭" focused={focused} />,
         }}
       />

@@ -3,16 +3,20 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Warehouse extends Model
 {
     protected $fillable = ['name', 'location'];
 
-    public function products(): BelongsToMany
+    protected $appends = ['products_count'];
+
+    public function emplacements()
     {
-        return $this->belongsToMany(Product::class, 'warehouse_products')
-            ->withPivot(['assigned_by', 'assigned_at'])
-            ->withTimestamps();
+        return $this->hasMany(Emplacement::class);
+    }
+
+    public function getProductsCountAttribute(): int
+    {
+        return $this->emplacements()->withCount('products')->get()->sum('products_count');
     }
 }

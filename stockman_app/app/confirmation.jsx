@@ -8,7 +8,7 @@ export default function ConfirmationScreen() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-  const { selectedEmplacement, selectedProduit, setSelectedProduit } = useApp();
+  const { selectedEmplacement, selectedProduit, setSelectedProduit, selectedWarehouse } = useApp();
   const router = useRouter();
 
   useEffect(() => {
@@ -53,7 +53,12 @@ export default function ConfirmationScreen() {
         </View>
         <View style={styles.divider} />
         <View style={styles.row}>
-          <Text style={styles.label}>Nouvel emplacement</Text>
+          <Text style={styles.label}>Entrepôt</Text>
+          <Text style={[styles.value, { color: '#002f5e' }]}>{selectedWarehouse?.name}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.row}>
+          <Text style={styles.label}>Emplacement</Text>
           <Text style={[styles.value, { color: '#002f5e' }]}>{selectedEmplacement.name}</Text>
         </View>
 

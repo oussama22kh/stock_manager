@@ -5,6 +5,14 @@ import api, { setToken, onUnauthorized, setBaseUrl } from '../api';
 const TOKEN_KEY = 'auth_token';
 const API_URL_KEY = 'api_url';
 
+function normalizeApiUrl(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  const noTrailing = trimmed.replace(/\/+$/, '');
+  if (noTrailing.endsWith('/api')) return noTrailing;
+  return noTrailing + '/api';
+}
+
 const AppContext = createContext();
 
 export function AppProvider({ children }) {
@@ -13,12 +21,17 @@ export function AppProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [apiUrl, setApiUrlState] = useState('');
 
+  const [selectedWarehouse, setSelectedWarehouse] = useState(null);
   const [selectedEmplacement, setSelectedEmplacement] = useState(null);
   const [selectedProduit, setSelectedProduit] = useState(null);
 
+  const [warehouses, setWarehouses] = useState([]);
+  const [warehousesLoading, setWarehousesLoading] = useState(false);
+  const [warehousesError, setWarehousesError] = useState(null);
+  const warehousesLoaded = useRef(false);
+
   const [emplacements, setEmplacements] = useState([]);
   const [emplacementsLoading, setEmplacementsLoading] = useState(false);
-  const emplacementsLoaded = useRef(false);
 
   const productsCache = useRef(new Map());
 
@@ -36,8 +49,9 @@ export function AppProvider({ children }) {
           setTokenState(storedToken);
         }
         if (storedApiUrl) {
-          setBaseUrl(storedApiUrl);
-          setApiUrlState(storedApiUrl);
+          const normalized = normalizeApiUrl(storedApiUrl);
+          setBaseUrl(normalized);
+          setApiUrlState(normalized);
         }
       } catch {
       } finally {
@@ -60,11 +74,11 @@ export function AppProvider({ children }) {
   }, []);
 
   const setApiUrl = useCallback(async (url) => {
-    const trimmed = url.trim();
-    setApiUrlState(trimmed);
-    if (trimmed) {
-      setBaseUrl(trimmed);
-      await SecureStore.setItemAsync(API_URL_KEY, trimmed);
+    const normalized = normalizeApiUrl(url);
+    setApiUrlState(normalized);
+    if (normalized) {
+      setBaseUrl(normalized);
+      await SecureStore.setItemAsync(API_URL_KEY, normalized);
     } else {
       setBaseUrl(null);
       try { await SecureStore.deleteItemAsync(API_URL_KEY); } catch {}
@@ -72,16 +86,15 @@ export function AppProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      await SecureStore.deleteItemAsync(TOKEN_KEY);
-    } catch {
-    }
+    try { await SecureStore.deleteItemAsync(TOKEN_KEY); } catch {}
     setToken(null);
     setTokenState(null);
     setUser(null);
+    setSelectedWarehouse(null);
     setSelectedEmplacement(null);
     setSelectedProduit(null);
-    emplacementsLoaded.current = false;
+    warehousesLoaded.current = false;
+    setEmplacements([]);
     productsCache.current.clear();
   }, []);
 
@@ -105,23 +118,37 @@ export function AppProvider({ children }) {
     return productsCache.current.get(barcode) || null;
   }, []);
 
-  const loadEmplacements = useCallback(async () => {
-    if (emplacementsLoaded.current) return;
-    setEmplacementsLoading(true);
+  const loadWarehouses = useCallback(async () => {
+    if (warehousesLoaded.current) return;
+    setWarehousesLoading(true);
+    setWarehousesError(null);
     try {
       const data = await api.get('/emplacements');
+      setWarehouses(data);
+      warehousesLoaded.current = true;
+    } catch (err) {
+      setWarehousesError(err.message || 'Erreur lors du chargement');
+    } finally {
+      setWarehousesLoading(false);
+    }
+  }, []);
+
+  const refreshWarehouses = useCallback(async () => {
+    warehousesLoaded.current = false;
+    await loadWarehouses();
+  }, [loadWarehouses]);
+
+  const loadEmplacements = useCallback(async (warehouseId) => {
+    setEmplacementsLoading(true);
+    try {
+      const data = await api.get(`/warehouses/${warehouseId}/emplacements`);
       setEmplacements(data);
-      emplacementsLoaded.current = true;
     } catch {
+      setEmplacements([]);
     } finally {
       setEmplacementsLoading(false);
     }
   }, []);
-
-  const refreshEmplacements = useCallback(async () => {
-    emplacementsLoaded.current = false;
-    await loadEmplacements();
-  }, [loadEmplacements]);
 
   return (
     <AppContext.Provider value={{
@@ -132,10 +159,12 @@ export function AppProvider({ children }) {
       logout,
       apiUrl,
       setApiUrl,
+      selectedWarehouse, setSelectedWarehouse,
       selectedEmplacement, setSelectedEmplacement,
       selectedProduit, setSelectedProduit,
       cacheProduct, cacheProducts, findCached,
-      emplacements, emplacementsLoading, loadEmplacements, refreshEmplacements,
+      warehouses, warehousesLoading, warehousesError, loadWarehouses, refreshWarehouses,
+      emplacements, emplacementsLoading, loadEmplacements,
     }}>
       {children}
     </AppContext.Provider>

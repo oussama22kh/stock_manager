@@ -9,7 +9,7 @@ class WarehouseProduct extends Model
 {
     protected $table = 'warehouse_products';
 
-    protected $fillable = ['warehouse_id', 'product_id', 'assigned_by', 'assigned_at'];
+    protected $fillable = ['emplacement_id', 'product_id', 'assigned_by', 'assigned_at'];
 
     public $timestamps = true;
 
@@ -18,8 +18,13 @@ class WarehouseProduct extends Model
         return $this->belongsTo(Product::class);
     }
 
+    public function emplacement(): BelongsTo
+    {
+        return $this->belongsTo(Emplacement::class);
+    }
+
     public function warehouse(): BelongsTo
     {
-        return $this->belongsTo(Warehouse::class);
+        return $this->belongsTo(Warehouse::class, 'emplacement_id');
     }
 }
