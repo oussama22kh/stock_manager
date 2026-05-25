@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Models\WarehouseProduct;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -14,9 +16,19 @@ class AdminController extends Controller
 {
     // ─── Users ───
 
-    public function users(): JsonResponse
+    public function users(Request $request): JsonResponse
     {
-        return response()->json(User::all());
+        $query = User::query();
+
+        if ($search = $request->get('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('username', 'like', "%{$search}%");
+            });
+        }
+
+        return response()->json($query->paginate(20));
     }
 
     public function storeUser(Request $request): JsonResponse
@@ -76,9 +88,18 @@ class AdminController extends Controller
 
     // ─── Products ───
 
-    public function products(): JsonResponse
+    public function products(Request $request): JsonResponse
     {
-        return response()->json(Product::with('warehouses')->get());
+        $query = Product::with('warehouses');
+
+        if ($search = $request->get('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('barcode', 'like', "%{$search}%");
+            });
+        }
+
+        return response()->json($query->paginate(20));
     }
 
     public function storeProduct(Request $request): JsonResponse
@@ -128,9 +149,18 @@ class AdminController extends Controller
 
     // ─── Emplacements (Warehouses) ───
 
-    public function emplacements(): JsonResponse
+    public function emplacements(Request $request): JsonResponse
     {
-        return response()->json(Warehouse::with('products')->get());
+        $query = Warehouse::with('products');
+
+        if ($search = $request->get('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('location', 'like', "%{$search}%");
+            });
+        }
+
+        return response()->json($query->paginate(20));
     }
 
     public function storeEmplacement(Request $request): JsonResponse
@@ -186,12 +216,12 @@ class AdminController extends Controller
 
         $file = $request->file('file');
         $handle = fopen($file->getPathname(), 'r');
-        $header = fgetcsv($handle, 0, ';');
+        $header = fgetcsv($handle);
 
         if (! $header || ! in_array('name', $header) || ! in_array('barcode', $header)) {
             fclose($handle);
 
-            return response()->json(['message' => 'CSV invalide. En-têtes requis: name;barcode;description'], 422);
+            return response()->json(['message' => 'CSV invalide. En-têtes requis: name,barcode,description'], 422);
         }
 
         $nameIdx = array_search('name', $header);
@@ -201,34 +231,49 @@ class AdminController extends Controller
         $created = 0;
         $skipped = 0;
         $errors = [];
+        $batch = [];
         $line = 1;
 
-        while (($row = fgetcsv($handle, 0, ';')) !== false) {
-            $line++;
-            $name = trim($row[$nameIdx] ?? '');
-            $barcode = trim($row[$barcodeIdx] ?? '');
-            $description = $descIdx !== false ? trim($row[$descIdx] ?? '') : null;
+        DB::beginTransaction();
 
-            if (empty($name) || empty($barcode)) {
-                $errors[] = "Ligne {$line}: name et barcode sont requis";
-                continue;
-            }
+        try {
+            while (($row = fgetcsv($handle)) !== false) {
+                $line++;
+                $name = trim($row[$nameIdx] ?? '');
+                $barcode = trim($row[$barcodeIdx] ?? '');
+                $description = $descIdx !== false ? trim($row[$descIdx] ?? '') : null;
 
-            if (Product::where('barcode', $barcode)->exists()) {
-                $skipped++;
-                continue;
-            }
+                if (empty($name) || empty($barcode)) {
+                    $errors[] = "Ligne {$line}: name et barcode sont requis";
+                    continue;
+                }
 
-            try {
-                Product::create([
+                $batch[] = [
                     'name' => $name,
                     'barcode' => $barcode,
-                    'description' => $description ?: null,
-                ]);
-                $created++;
-            } catch (\Throwable $e) {
-                $errors[] = "Ligne {$line}: {$e->getMessage()}";
+                    'description' => $description,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+
+                if (count($batch) >= 500) {
+                    $result = $this->flushProductBatch($batch, $skipped);
+                    $created += $result['created'];
+                    $batch = [];
+                }
             }
+
+            if (! empty($batch)) {
+                $result = $this->flushProductBatch($batch, $skipped);
+                $created += $result['created'];
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            fclose($handle);
+
+            return response()->json(['message' => 'Erreur lors de l\'import: '.$e->getMessage()], 500);
         }
 
         fclose($handle);
@@ -241,16 +286,37 @@ class AdminController extends Controller
         ]);
     }
 
+    private function flushProductBatch(array $batch, int &$skipped): array
+    {
+        $barcodes = array_column($batch, 'barcode');
+        $existing = Product::whereIn('barcode', $barcodes)->pluck('barcode')->map(fn ($v) => strtolower($v))->toArray();
+
+        $toInsert = [];
+        foreach ($batch as $row) {
+            if (in_array(strtolower($row['barcode']), $existing)) {
+                $skipped++;
+            } else {
+                $toInsert[] = $row;
+            }
+        }
+
+        if (! empty($toInsert)) {
+            Product::insert($toInsert);
+        }
+
+        return ['created' => count($toInsert)];
+    }
+
     public function exportProducts(): \Symfony\Component\HttpFoundation\StreamedResponse
     {
         $products = Product::all(['name', 'barcode', 'description']);
 
         return response()->streamDownload(function () use ($products) {
             $output = fopen('php://output', 'w');
-            fputcsv($output, ['name', 'barcode', 'description'], ';');
+            fputcsv($output, ['name', 'barcode', 'description']);
 
             foreach ($products as $p) {
-                fputcsv($output, [$p->name, $p->barcode, $p->description ?? ''], ';');
+                fputcsv($output, [$p->name, $p->barcode, $p->description ?? '']);
             }
 
             fclose($output);
@@ -267,12 +333,12 @@ class AdminController extends Controller
 
         $file = $request->file('file');
         $handle = fopen($file->getPathname(), 'r');
-        $header = fgetcsv($handle, 0, ';');
+        $header = fgetcsv($handle);
 
         if (! $header || ! in_array('name', $header)) {
             fclose($handle);
 
-            return response()->json(['message' => 'CSV invalide. En-têtes requis: name;location'], 422);
+            return response()->json(['message' => 'CSV invalide. En-têtes requis: name,location'], 422);
         }
 
         $nameIdx = array_search('name', $header);
@@ -281,32 +347,47 @@ class AdminController extends Controller
         $created = 0;
         $skipped = 0;
         $errors = [];
+        $batch = [];
         $line = 1;
 
-        while (($row = fgetcsv($handle, 0, ';')) !== false) {
-            $line++;
-            $name = trim($row[$nameIdx] ?? '');
-            $location = $locIdx !== false ? trim($row[$locIdx] ?? '') : null;
+        DB::beginTransaction();
 
-            if (empty($name)) {
-                $errors[] = "Ligne {$line}: name est requis";
-                continue;
-            }
+        try {
+            while (($row = fgetcsv($handle)) !== false) {
+                $line++;
+                $name = trim($row[$nameIdx] ?? '');
+                $location = $locIdx !== false ? trim($row[$locIdx] ?? '') : null;
 
-            if (Warehouse::where('name', $name)->exists()) {
-                $skipped++;
-                continue;
-            }
+                if (empty($name)) {
+                    $errors[] = "Ligne {$line}: name est requis";
+                    continue;
+                }
 
-            try {
-                Warehouse::create([
+                $batch[] = [
                     'name' => $name,
-                    'location' => $location ?: null,
-                ]);
-                $created++;
-            } catch (\Throwable $e) {
-                $errors[] = "Ligne {$line}: {$e->getMessage()}";
+                    'location' => $location,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+
+                if (count($batch) >= 500) {
+                    $result = $this->flushEmplacementBatch($batch, $skipped);
+                    $created += $result['created'];
+                    $batch = [];
+                }
             }
+
+            if (! empty($batch)) {
+                $result = $this->flushEmplacementBatch($batch, $skipped);
+                $created += $result['created'];
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            fclose($handle);
+
+            return response()->json(['message' => 'Erreur lors de l\'import: '.$e->getMessage()], 500);
         }
 
         fclose($handle);
@@ -319,21 +400,84 @@ class AdminController extends Controller
         ]);
     }
 
+    private function flushEmplacementBatch(array $batch, int &$skipped): array
+    {
+        $names = array_column($batch, 'name');
+        $existing = Warehouse::whereIn('name', $names)->pluck('name')->map(fn ($v) => strtolower($v))->toArray();
+
+        $toInsert = [];
+        foreach ($batch as $row) {
+            if (in_array(strtolower($row['name']), $existing)) {
+                $skipped++;
+            } else {
+                $toInsert[] = $row;
+            }
+        }
+
+        if (! empty($toInsert)) {
+            Warehouse::insert($toInsert);
+        }
+
+        return ['created' => count($toInsert)];
+    }
+
     public function exportEmplacements(): \Symfony\Component\HttpFoundation\StreamedResponse
     {
         $emplacements = Warehouse::all(['name', 'location']);
 
         return response()->streamDownload(function () use ($emplacements) {
             $output = fopen('php://output', 'w');
-            fputcsv($output, ['name', 'location'], ';');
+            fputcsv($output, ['name', 'location']);
 
             foreach ($emplacements as $e) {
-                fputcsv($output, [$e->name, $e->location ?? ''], ';');
+                fputcsv($output, [$e->name, $e->location ?? '']);
             }
 
             fclose($output);
         }, 'emplacements_'.now()->format('Y-m-d_His').'.csv', [
             'Content-Type' => 'text/csv; charset=utf-8',
+        ]);
+    }
+
+    public function stats(): JsonResponse
+    {
+        $totalProducts = Product::count();
+        $totalWarehouses = Warehouse::count();
+        $assignedProducts = WarehouseProduct::distinct('product_id')->count('product_id');
+        $unassignedProducts = $totalProducts - $assignedProducts;
+
+        $productsPerWarehouse = Warehouse::withCount('products')
+            ->orderByDesc('products_count')
+            ->get(['id', 'name', 'products_count']);
+
+        $recentAssignments = WarehouseProduct::with(['product:id,name,barcode', 'warehouse:id,name'])
+            ->latest('assigned_at')
+            ->take(10)
+            ->get()
+            ->map(fn ($wp) => [
+                'product_name' => $wp->product?->name,
+                'product_barcode' => $wp->product?->barcode,
+                'warehouse_name' => $wp->warehouse?->name,
+                'assigned_at' => $wp->assigned_at,
+            ]);
+
+        $recentProducts = Product::latest()->take(5)->get(['id', 'name', 'barcode', 'created_at']);
+
+        $totalUsers = User::count();
+        $adminUsers = User::where('role', 'admin')->count();
+        $agentUsers = User::where('role', 'agent')->count();
+
+        return response()->json([
+            'total_products' => $totalProducts,
+            'assigned_products' => $assignedProducts,
+            'unassigned_products' => $unassignedProducts,
+            'total_warehouses' => $totalWarehouses,
+            'products_per_warehouse' => $productsPerWarehouse,
+            'recent_assignments' => $recentAssignments,
+            'recent_products' => $recentProducts,
+            'total_users' => $totalUsers,
+            'admin_users' => $adminUsers,
+            'agent_users' => $agentUsers,
         ]);
     }
 }

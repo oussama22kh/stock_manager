@@ -6,50 +6,51 @@ import SearchBar from '../components/SearchBar'
 import ProductCard from '../components/ProductCard'
 import BarcodeScanner from '../components/BarcodeScanner'
 
+function SkeletonCard() {
+  return (
+    <div className="bg-white rounded-xl p-4 border animate-pulse">
+      <div className="h-4 bg-gray-200 rounded w-3/4 mb-3" />
+      <div className="h-3 bg-gray-200 rounded w-1/2 mb-2" />
+      <div className="h-3 bg-gray-200 rounded w-1/3" />
+    </div>
+  )
+}
+
 export default function Products() {
-  const [produits, setProduits] = useState([])
-  const [availableProduits, setAvailableProduits] = useState([])
   const [filteredProduits, setFilteredProduits] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('list')
+  const [tab, setTab] = useState('scan')
   const [searchQuery, setSearchQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState('')
   const [error, setError] = useState('')
-  const { selectedEmplacement, setSelectedProduit } = useApp()
+  const [hasSearched, setHasSearched] = useState(false)
+  const {
+    selectedEmplacement, setSelectedProduit,
+    cacheProduct, cacheProducts, findCached,
+  } = useApp()
   const navigate = useNavigate()
 
   useEffect(() => {
     if (!selectedEmplacement) {
       navigate('/emplacements')
-      return
     }
-    api.get('/produits')
-      .then(res => {
-        const all = res.data
-        setProduits(all)
-        // Only show products not already in the selected zone
-        const available = all.filter(p => p.emplacement_id !== selectedEmplacement.id)
-        setAvailableProduits(available)
-        setFilteredProduits(available)
-      })
-      .catch(() => setError('Erreur lors du chargement des produits'))
-      .finally(() => setLoading(false))
   }, [selectedEmplacement, navigate])
 
   useEffect(() => {
-    if (tab === 'list') {
-      setFilteredProduits(availableProduits)
+    if (tab === 'search') {
       setSearchQuery('')
+      setFilteredProduits([])
+      setHasSearched(false)
       setError('')
     }
-  }, [tab, availableProduits])
+  }, [tab])
 
   const handleSearch = useCallback(async (query) => {
     setSearchQuery(query)
     if (!query.trim()) {
-      setFilteredProduits(availableProduits)
+      setFilteredProduits([])
+      setHasSearched(false)
       setSearching(false)
       return
     }
@@ -57,15 +58,16 @@ export default function Products() {
     setError('')
     try {
       const res = await api.get(`/produits?search=${encodeURIComponent(query)}`)
-      // Filter search results to exclude products already in selected zone
       const results = res.data.filter(p => p.emplacement_id !== selectedEmplacement.id)
+      cacheProducts(results)
       setFilteredProduits(results)
+      setHasSearched(true)
     } catch {
       setError('Erreur lors de la recherche')
     } finally {
       setSearching(false)
     }
-  }, [availableProduits, selectedEmplacement])
+  }, [selectedEmplacement, cacheProducts])
 
   const handleProductClick = (product) => {
     setSelectedProduit(product)
@@ -75,8 +77,22 @@ export default function Products() {
   const handleScan = async (code) => {
     setScanError('')
     setScanning(true)
+
+    const cached = findCached(code)
+    if (cached) {
+      setScanning(false)
+      if (cached.emplacement_id === selectedEmplacement.id) {
+        setScanError('Ce produit est déjà dans cet emplacement')
+        return
+      }
+      setSelectedProduit(cached)
+      navigate('/confirmation')
+      return
+    }
+
     try {
       const res = await api.get(`/produits/code/${code}`)
+      cacheProduct(res.data)
       if (res.data.emplacement_id === selectedEmplacement.id) {
         setScanError('Ce produit est déjà dans cet emplacement')
         setScanning(false)
@@ -94,9 +110,8 @@ export default function Products() {
   if (!selectedEmplacement) return null
 
   const tabs = [
-    { key: 'list', label: 'Liste' },
-    { key: 'search', label: 'Recherche' },
     { key: 'scan', label: 'Scanner' },
+    { key: 'search', label: 'Recherche' },
   ]
 
   return (
@@ -142,7 +157,7 @@ export default function Products() {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          <span>Recherche en cours...</span>
+          <span>Recherche du produit...</span>
         </div>
       )}
 
@@ -151,35 +166,34 @@ export default function Products() {
       )}
 
       {tab === 'search' && (
-        <div className="mb-4">
-          <SearchBar
-            key={tab}
-            initialValue={searchQuery}
-            onSearch={handleSearch}
-            placeholder="Rechercher par nom ou code..."
-          />
-        </div>
-      )}
-
-      {(tab === 'list' || tab === 'search') && (
         <>
-          {loading || searching ? (
-            <div className="text-center py-12 text-gray-500">
-              {loading ? 'Chargement...' : 'Recherche...'}
+          <div className="mb-4">
+            <SearchBar
+              key="search"
+              initialValue=""
+              onSearch={handleSearch}
+              placeholder="Rechercher par nom ou code..."
+            />
+          </div>
+
+          {searching ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
             </div>
-          ) : filteredProduits.length === 0 ? (
+          ) : hasSearched && filteredProduits.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
-              {tab === 'search'
-                ? 'Aucun produit trouvé pour cette recherche'
-                : 'Tous les produits sont déjà dans cet emplacement'}
+              Aucun produit trouvé pour cette recherche
             </div>
-          ) : (
+          ) : filteredProduits.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {filteredProduits.map(p => (
                 <ProductCard key={p.id} product={p} onClick={handleProductClick} />
               ))}
             </div>
-          )}
+          ) : null}
         </>
       )}
     </div>

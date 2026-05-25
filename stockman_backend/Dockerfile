@@ -35,6 +35,14 @@ RUN apt-get update && apt-get install -y \
 RUN sed -i 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/000-default.conf
 RUN sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
 
+RUN { \
+    echo 'upload_max_filesize = 20M'; \
+    echo 'post_max_size = 25M'; \
+    echo 'max_execution_time = 300'; \
+    echo 'max_input_time = 300'; \
+    echo 'memory_limit = 256M'; \
+} > /usr/local/etc/php/conf.d/uploads.ini
+
 COPY --from=build /app /var/www/html
 
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache

@@ -6,6 +6,7 @@ import Emplacements from './pages/Emplacements'
 import Products from './pages/Products'
 import Confirmation from './pages/Confirmation'
 import AdminDashboard from './pages/AdminDashboard'
+import StatsDashboard from './pages/StatsDashboard'
 
 function PrivateRoute({ children }) {
   const { token } = useApp()
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/produits" element={<PrivateRoute><Products /></PrivateRoute>} />
           <Route path="/confirmation" element={<PrivateRoute><Confirmation /></PrivateRoute>} />
           <Route path="/admin" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
+          <Route path="/stats" element={<PrivateRoute><StatsDashboard /></PrivateRoute>} />
         </Routes>
       </main>
     </div>

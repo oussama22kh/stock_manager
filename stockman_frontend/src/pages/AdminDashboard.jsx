@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import api from '../services/api'
+import SearchBar from '../components/SearchBar'
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('users')
@@ -10,6 +11,8 @@ export default function AdminDashboard() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [importLoading, setImportLoading] = useState(false)
+  const [pagination, setPagination] = useState({ currentPage: 1, lastPage: 1, total: 0 })
+  const [searchQuery, setSearchQuery] = useState('')
 
   const fileInputRef = useRef(null)
 
@@ -73,26 +76,36 @@ export default function AdminDashboard() {
     },
   }
 
-  const fetchItems = useCallback(async () => {
+  const fetchItems = useCallback(async (page = 1) => {
     setLoading(true)
     setError('')
     try {
-      const res = await api.get(tabConfig[activeTab].endpoint)
-      let data = res.data
-      if (activeTab === 'emplacements') {
-        data = data.map(e => ({ ...e, products_count: e.products?.length || 0 }))
+      const params = new URLSearchParams({ page })
+      if (searchQuery.trim()) {
+        params.set('search', searchQuery.trim())
       }
-      setItems(data)
+      const res = await api.get(`${tabConfig[activeTab].endpoint}?${params}`)
+      const { data, current_page, last_page, total } = res.data
+      if (activeTab === 'emplacements') {
+        setItems(data.map(e => ({ ...e, products_count: e.products?.length || 0 })))
+      } else {
+        setItems(data)
+      }
+      setPagination({ currentPage: current_page, lastPage: last_page, total })
     } catch (err) {
       setError(err.response?.data?.message || 'Erreur de chargement')
     } finally {
       setLoading(false)
     }
-  }, [activeTab])
+  }, [activeTab, searchQuery])
 
   useEffect(() => {
-    fetchItems()
+    fetchItems(1)
   }, [fetchItems])
+
+  const handleSearch = useCallback((query) => {
+    setSearchQuery(query)
+  }, [])
 
   const resetForm = () => {
     const defaults = {}
@@ -275,13 +288,6 @@ export default function AdminDashboard() {
           </button>
         </div>
       </div>
-
-      {/* Messages */}
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm border border-red-200">
-          {error}
-        </div>
-      )}
       {success && (
         <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm border border-green-200">
           {success}
@@ -293,7 +299,7 @@ export default function AdminDashboard() {
         {Object.entries(tabConfig).map(([key, config]) => (
           <button
             key={key}
-            onClick={() => { setActiveTab(key); setError(''); setSuccess('') }}
+            onClick={() => { setActiveTab(key); setSearchQuery(''); setError(''); setSuccess('') }}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
               activeTab === key
                 ? 'bg-[#e6eef7] text-[#002f5e] border-b-2 border-[#f86126]'
@@ -303,6 +309,15 @@ export default function AdminDashboard() {
             {config.label}
           </button>
         ))}
+      </div>
+
+      <div className="mb-6">
+        <SearchBar
+          onSearch={handleSearch}
+          placeholder={`Rechercher dans ${tabConfig[activeTab].label.toLowerCase()}...`}
+          initialValue=""
+          key={activeTab}
+        />
       </div>
 
       {/* Table */}
@@ -351,6 +366,33 @@ export default function AdminDashboard() {
               </tbody>
             </table>
           </div>
+
+          {pagination.lastPage > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+              <span className="text-sm text-gray-600">
+                {pagination.total} résultat(s)
+              </span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => fetchItems(pagination.currentPage - 1)}
+                  disabled={pagination.currentPage <= 1}
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Précédent
+                </button>
+                <span className="px-3 py-1 text-sm text-gray-700">
+                  {pagination.currentPage} / {pagination.lastPage}
+                </span>
+                <button
+                  onClick={() => fetchItems(pagination.currentPage + 1)}
+                  disabled={pagination.currentPage >= pagination.lastPage}
+                  className="px-3 py-1 text-sm border rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Suivant
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

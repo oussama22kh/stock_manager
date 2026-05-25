@@ -8,6 +8,8 @@ class EmplacementController extends Controller
 {
     public function index()
     {
-        return response()->json(Warehouse::all());
+        return response()->json(
+            Warehouse::withCount('products')->get()
+        );
     }
 }

@@ -30,6 +30,7 @@ export default function Navbar() {
           </Link>
           <Link to="/emplacements" className="text-sm text-gray-600 hover:text-[#f86126]">Emplacements</Link>
           <Link to="/produits" className="text-sm text-gray-600 hover:text-[#f86126]">Produits</Link>
+          <Link to="/stats" className="text-sm text-gray-600 hover:text-[#f86126]">Stats</Link>
           {isAdmin && (
             <Link to="/admin" className="text-sm text-gray-600 hover:text-[#f86126]">Admin</Link>
           )}

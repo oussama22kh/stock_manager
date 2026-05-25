@@ -8,7 +8,9 @@ class WarehouseController extends Controller
 {
     public function index()
     {
-        return response()->json(Warehouse::all());
+        return response()->json(
+            Warehouse::withCount('products')->get()
+        );
     }
 
     public function products($id)
