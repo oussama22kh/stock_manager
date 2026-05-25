@@ -86,21 +86,21 @@ export default function BarcodeScanner({ onScan }) {
         {!isScanning ? (
           <button
             onClick={startScanning}
-            className="px-4 py-2 bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a]"
+            className="px-4 py-2 min-h-[44px] bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a]"
           >
             Démarrer le scan
           </button>
         ) : (
           <button
             onClick={stopScanning}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            className="px-4 py-2 min-h-[44px] bg-red-600 text-white rounded-lg hover:bg-red-700"
           >
             Arrêter le scan
           </button>
         )}
         <button
           onClick={handleManualEntry}
-          className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
+          className="px-4 py-2 min-h-[44px] bg-gray-600 text-white rounded-lg hover:bg-gray-700"
         >
           Saisie manuelle
         </button>

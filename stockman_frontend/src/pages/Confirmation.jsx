@@ -68,14 +68,14 @@ export default function Confirmation() {
             <div className="flex gap-3 pt-2">
               <button
                 onClick={() => navigate('/produits')}
-                className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                className="flex-1 py-2 min-h-[44px] border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >
                 Annuler
               </button>
               <button
                 onClick={handleConfirm}
                 disabled={loading}
-                className="flex-1 py-2 bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a] disabled:opacity-50"
+                className="flex-1 py-2 min-h-[44px] bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a] disabled:opacity-50"
               >
                 {loading ? 'Assignation...' : 'Confirmer'}
               </button>
@@ -86,7 +86,7 @@ export default function Confirmation() {
         {success && (
           <button
             onClick={() => navigate('/produits')}
-            className="w-full py-2 bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a]"
+            className="w-full py-2 min-h-[44px] bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a]"
           >
             Retour aux produits
           </button>

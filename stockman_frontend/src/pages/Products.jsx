@@ -127,8 +127,8 @@ export default function Products() {
         {tabs.map(t => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
+              onClick={() => setTab(t.key)}
+              className={`flex-1 py-2 min-h-[44px] text-sm font-medium rounded-md transition-all ${
               tab === t.key ? 'bg-white text-[#f86126] shadow-sm' : 'text-gray-600 hover:text-[#f86126]'
             }`}
           >

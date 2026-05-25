@@ -164,28 +164,43 @@ export default function StatsDashboard() {
           Derniers produits ajoutés
         </h2>
         {stats.recent_products.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 border-b">
-                  <th className="pb-2 font-medium">Nom</th>
-                  <th className="pb-2 font-medium">Code-barres</th>
-                  <th className="pb-2 font-medium text-right">Ajouté le</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {stats.recent_products.map(p => (
-                  <tr key={p.id}>
-                    <td className="py-2.5 text-gray-800">{p.name}</td>
-                    <td className="py-2.5 text-gray-500 font-mono text-xs">{p.barcode}</td>
-                    <td className="py-2.5 text-gray-400 text-right text-xs">
-                      {new Date(p.created_at).toLocaleDateString('fr-FR')}
-                    </td>
+          <>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b">
+                    <th className="pb-2 font-medium">Nom</th>
+                    <th className="pb-2 font-medium">Code-barres</th>
+                    <th className="pb-2 font-medium text-right">Ajouté le</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {stats.recent_products.map(p => (
+                    <tr key={p.id}>
+                      <td className="py-2.5 text-gray-800">{p.name}</td>
+                      <td className="py-2.5 text-gray-500 font-mono text-xs">{p.barcode}</td>
+                      <td className="py-2.5 text-gray-400 text-right text-xs">
+                        {new Date(p.created_at).toLocaleDateString('fr-FR')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="md:hidden space-y-3">
+              {stats.recent_products.map(p => (
+                <div key={p.id} className="bg-gray-50 rounded-lg p-3 space-y-1">
+                  <div className="flex justify-between items-start">
+                    <span className="text-sm text-gray-800 font-medium">{p.name}</span>
+                    <span className="text-xs text-gray-400">
+                      {new Date(p.created_at).toLocaleDateString('fr-FR')}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 font-mono">Code: {p.barcode}</p>
+                </div>
+              ))}
+            </div>
+          </>
         ) : (
           <p className="text-sm text-gray-400 py-4 text-center">Aucun produit</p>
         )}

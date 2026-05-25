@@ -246,14 +246,14 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Administration</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {currentConfig.importExport && (
             <>
               <button
                 onClick={downloadTemplate}
-                className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
+                className="px-3 py-2 min-h-[44px] border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
                 title="Télécharger le modèle CSV"
               >
                 Modèle CSV
@@ -261,7 +261,7 @@ export default function AdminDashboard() {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={importLoading}
-                className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-50"
+                className="px-3 py-2 min-h-[44px] bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-50"
               >
                 {importLoading ? 'Import...' : 'Importer CSV'}
               </button>
@@ -274,7 +274,7 @@ export default function AdminDashboard() {
               />
               <button
                 onClick={handleExport}
-                className="px-3 py-2 bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a] text-sm font-medium"
+                className="px-3 py-2 min-h-[44px] bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a] text-sm font-medium"
               >
                 Exporter CSV
               </button>
@@ -295,12 +295,12 @@ export default function AdminDashboard() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200">
+      <div className="flex gap-1 mb-6 border-b border-gray-200 overflow-x-auto whitespace-nowrap">
         {Object.entries(tabConfig).map(([key, config]) => (
           <button
             key={key}
             onClick={() => { setActiveTab(key); setSearchQuery(''); setError(''); setSuccess('') }}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+            className={`px-4 py-2 min-h-[44px] text-sm font-medium rounded-t-lg transition-colors ${
               activeTab === key
                 ? 'bg-[#e6eef7] text-[#002f5e] border-b-2 border-[#f86126]'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
@@ -326,74 +326,129 @@ export default function AdminDashboard() {
       ) : items.length === 0 ? (
         <div className="text-center py-12 text-gray-400">Aucun élément</div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  {currentConfig.columns.map(col => (
-                    <th key={col.key} className="px-4 py-3 text-left font-medium text-gray-700">
-                      {col.label}
-                    </th>
-                  ))}
-                  <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {items.map(item => (
-                  <tr key={item.id} className="hover:bg-gray-50">
+        <>
+          <div className="hidden md:block bg-white rounded-xl shadow-sm border overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
                     {currentConfig.columns.map(col => (
-                      <td key={col.key} className="px-4 py-3 text-gray-700">
-                        {item[col.key] || '—'}
-                      </td>
+                      <th key={col.key} className="px-4 py-3 text-left font-medium text-gray-700">
+                        {col.label}
+                      </th>
                     ))}
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => openEditModal(item)}
-                        className="text-[#f86126] hover:text-[#d94d1a] font-medium mr-3"
-                      >
-                        Modifier
-                      </button>
-                      <button
-                        onClick={() => handleDelete(item)}
-                        className="text-red-500 hover:text-red-700 font-medium"
-                      >
-                        Supprimer
-                      </button>
-                    </td>
+                    <th className="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {items.map(item => (
+                    <tr key={item.id} className="hover:bg-gray-50">
+                      {currentConfig.columns.map(col => (
+                        <td key={col.key} className="px-4 py-3 text-gray-700">
+                          {item[col.key] || '—'}
+                        </td>
+                      ))}
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => openEditModal(item)}
+                          className="text-[#f86126] hover:text-[#d94d1a] font-medium mr-3 py-2 inline-block"
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item)}
+                          className="text-red-500 hover:text-red-700 font-medium py-2 inline-block"
+                        >
+                          Supprimer
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {pagination.lastPage > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
+                <span className="text-sm text-gray-600">
+                  {pagination.total} résultat(s)
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => fetchItems(pagination.currentPage - 1)}
+                    disabled={pagination.currentPage <= 1}
+                    className="px-3 py-1 min-h-[44px] text-sm border rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Précédent
+                  </button>
+                  <span className="px-3 py-1 text-sm text-gray-700">
+                    {pagination.currentPage} / {pagination.lastPage}
+                  </span>
+                  <button
+                    onClick={() => fetchItems(pagination.currentPage + 1)}
+                    disabled={pagination.currentPage >= pagination.lastPage}
+                    className="px-3 py-1 min-h-[44px] text-sm border rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Suivant
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          {pagination.lastPage > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50">
-              <span className="text-sm text-gray-600">
-                {pagination.total} résultat(s)
-              </span>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => fetchItems(pagination.currentPage - 1)}
-                  disabled={pagination.currentPage <= 1}
-                  className="px-3 py-1 text-sm border rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Précédent
-                </button>
-                <span className="px-3 py-1 text-sm text-gray-700">
-                  {pagination.currentPage} / {pagination.lastPage}
-                </span>
-                <button
-                  onClick={() => fetchItems(pagination.currentPage + 1)}
-                  disabled={pagination.currentPage >= pagination.lastPage}
-                  className="px-3 py-1 text-sm border rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Suivant
-                </button>
+          <div className="md:hidden space-y-3">
+            {items.map(item => (
+              <div key={item.id} className="bg-white rounded-xl border p-4 space-y-2">
+                {currentConfig.columns.map(col => (
+                  <div key={col.key} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500 uppercase">{col.label}</span>
+                    <span className="text-sm text-gray-800 font-medium">{item[col.key] || '—'}</span>
+                  </div>
+                ))}
+                <div className="flex gap-2 pt-2 border-t">
+                  <button
+                    onClick={() => openEditModal(item)}
+                    className="flex-1 py-2 min-h-[44px] text-sm text-[#f86126] border border-[#f86126] rounded-lg font-medium"
+                  >
+                    Modifier
+                  </button>
+                  <button
+                    onClick={() => handleDelete(item)}
+                    className="flex-1 py-2 min-h-[44px] text-sm text-red-500 border border-red-300 rounded-lg font-medium"
+                  >
+                    Supprimer
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            ))}
+            {pagination.lastPage > 1 && (
+              <div className="flex items-center justify-between bg-white rounded-xl border px-4 py-3">
+                <span className="text-sm text-gray-600">
+                  {pagination.total} résultat(s)
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => fetchItems(pagination.currentPage - 1)}
+                    disabled={pagination.currentPage <= 1}
+                    className="px-3 py-1 min-h-[44px] text-sm border rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Précédent
+                  </button>
+                  <span className="px-3 py-1 text-sm text-gray-700">
+                    {pagination.currentPage} / {pagination.lastPage}
+                  </span>
+                  <button
+                    onClick={() => fetchItems(pagination.currentPage + 1)}
+                    disabled={pagination.currentPage >= pagination.lastPage}
+                    className="px-3 py-1 min-h-[44px] text-sm border rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Suivant
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* Modal */}
@@ -421,14 +476,14 @@ export default function AdminDashboard() {
                         <textarea
                           value={formData[field.key] || ''}
                           onChange={e => setFormData({ ...formData, [field.key]: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126] min-h-[80px]"
+                          className="w-full px-3 py-2 min-h-[44px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126] min-h-[80px]"
                           required={isRequired}
                         />
                       ) : field.type === 'select' ? (
                         <select
                           value={formData[field.key] || ''}
                           onChange={e => setFormData({ ...formData, [field.key]: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126]"
+                          className="w-full px-3 py-2 min-h-[44px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126]"
                           required={isRequired}
                         >
                           {field.options.map(opt => (
@@ -440,7 +495,7 @@ export default function AdminDashboard() {
                           type={field.type}
                           value={formData[field.key] || ''}
                           onChange={e => setFormData({ ...formData, [field.key]: e.target.value })}
-                          className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126]"
+                          className="w-full px-3 py-2 min-h-[44px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126]"
                           required={isRequired}
                         />
                       )}
@@ -452,13 +507,13 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     onClick={() => setModalOpen(false)}
-                    className="flex-1 py-2 border rounded-lg text-gray-600 hover:bg-gray-50"
+                      className="flex-1 py-2 min-h-[44px] border rounded-lg text-gray-600 hover:bg-gray-50"
                   >
                     Annuler
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 py-2 bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a]"
+                      className="flex-1 py-2 min-h-[44px] bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a]"
                   >
                     {editingItem ? 'Enregistrer' : 'Créer'}
                   </button>
