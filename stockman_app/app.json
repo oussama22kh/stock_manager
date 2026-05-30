@@ -7,6 +7,11 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "scheme": "stockman",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#002f5e"
+    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -50,7 +55,8 @@
             "enableMultidex": true
           }
         }
-      ]
+      ],
+      "expo-splash-screen"
     ],
     "extra": {
       "router": {},

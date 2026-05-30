@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '../src/context/AppContext';
 
@@ -41,7 +41,7 @@ export default function LoginScreen() {
     >
       <View style={styles.inner}>
         <View style={styles.header}>
-          <Text style={styles.title}>Stock Manager</Text>
+          <Image source={require('../assets/stock_logo.png')} style={styles.logo} resizeMode="contain" />
           <Text style={styles.subtitle}>Connectez-vous pour continuer</Text>
         </View>
 
@@ -124,13 +124,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   header: {
+    alignItems: 'center',
     marginBottom: 32,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#fff',
-    textAlign: 'center',
+  logo: {
+    width: 120,
+    height: 140,
+    marginBottom: 12,
   },
   subtitle: {
     fontSize: 15,

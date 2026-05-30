@@ -1,7 +1,10 @@
 import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { AppProvider, useApp } from '../src/context/AppContext';
+
+SplashScreen.preventAutoHideAsync();
 
 function AuthGuard({ children }) {
   const { token, isLoading } = useApp();
@@ -12,6 +15,8 @@ function AuthGuard({ children }) {
     if (isLoading) return;
     if (!token && segments[0] !== 'login') {
       router.replace('/login');
+    } else {
+      SplashScreen.hideAsync();
     }
   }, [token, isLoading]);
 

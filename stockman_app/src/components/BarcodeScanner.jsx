@@ -41,6 +41,7 @@ export default function BarcodeScanner({ onScan }) {
         scannedRef.current = false;
       }, 1500);
     } else {
+      scannedRef.current = false;
       setActive(false);
     }
   };
@@ -85,11 +86,13 @@ export default function BarcodeScanner({ onScan }) {
 
       <View style={[styles.cameraContainer, active && styles.cameraActive]}>
         {active ? (
-          <CameraView
+            <CameraView
+            key={active ? 'camera-on' : 'camera-off'}
             style={styles.camera}
             facing="back"
+            autofocus="on"
             barcodeScannerSettings={{
-              barcodeTypes: ['ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e'],
+              barcodeTypes: ['aztec', 'codabar', 'code128', 'code39', 'code93', 'datamatrix', 'ean13', 'ean8', 'itf14', 'pdf417', 'qr', 'upc_a', 'upc_e'],
             }}
             onBarcodeScanned={handleBarcodeScanned}
           />
@@ -186,7 +189,7 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     width: '100%',
-    height: 260,
+    height: 320,
     backgroundColor: '#000',
     borderRadius: 12,
     overflow: 'hidden',
