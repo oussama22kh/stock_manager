@@ -59,7 +59,7 @@ export default function LoginScreen() {
               value={localApiUrl}
               onChangeText={setLocalApiUrl}
               onBlur={() => setApiUrl(localApiUrl)}
-              placeholder="http://10.10.1.125:1234/api"
+              placeholder="http://10.10.1.125/1234/api"
               placeholderTextColor="#999"
               autoCapitalize="none"
               autoCorrect={false}

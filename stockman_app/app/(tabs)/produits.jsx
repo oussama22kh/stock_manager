@@ -48,7 +48,7 @@ export default function ProduitsScreen() {
   }, [selectedEmplacement, router]);
 
   useEffect(() => {
-    if (tab === 'scan' && !_BarcodeScanner && !scanLoadAttempted.current) {
+    if (tab === 'scan' && !scannerLoaded && !scanLoadAttempted.current) {
       scanLoadAttempted.current = true;
       try {
         _BarcodeScanner = require('../../src/components/BarcodeScanner').default;

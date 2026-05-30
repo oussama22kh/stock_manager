@@ -69,7 +69,7 @@ export default function SettingsScreen() {
             style={styles.input}
             value={localUrl}
             onChangeText={setLocalUrl}
-            placeholder="http://10.10.1.125:1234/api"
+              placeholder="http://10.10.1.125/1234/api"
             placeholderTextColor="#999"
             autoCapitalize="none"
             autoCorrect={false}
