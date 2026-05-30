@@ -110,7 +110,7 @@ export default function Products() {
   if (!selectedEmplacement) return null
 
   const tabs = [
-    { key: 'scan', label: 'Scanner' },
+    { key: 'scan', label: 'Saisie code' },
     { key: 'search', label: 'Recherche' },
   ]
 

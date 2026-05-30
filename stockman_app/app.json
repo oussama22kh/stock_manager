@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Stockman",
-    "slug": "stockman_app",
+    "slug": "stockmanager",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,7 +10,10 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Camera is used to scan barcodes"
+        "NSCameraUsageDescription": "Camera is used to scan barcodes",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       }
     },
     "android": {
@@ -24,19 +27,37 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.anonymous.stockman_app"
+      "package": "com.anonymous.stockman_app",
+      "enableProguardInReleaseBuilds": true,
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/withCleartextTraffic",
       "expo-router",
       [
         "expo-camera",
         {
           "cameraPermission": "Allow Stockman to access your camera to scan barcodes."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMultidex": true
+          }
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8f84851f-d8da-4318-b99c-4ba7d7f6bc7f"
+      }
+    },
+    "owner": "saididbs-organization"
   }
 }

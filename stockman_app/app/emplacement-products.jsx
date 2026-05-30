@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useApp } from '../../src/context/AppContext';
-import api from '../../src/api';
-import SelectionBadge from '../../src/components/SelectionBadge';
+import { useApp } from '../src/context/AppContext';
+import api from '../src/api';
+import SelectionBadge from '../src/components/SelectionBadge';
 
 export default function EmplacementProductsScreen() {
   const { selectedEmplacement, selectedWarehouse, setSelectedProduit } = useApp();

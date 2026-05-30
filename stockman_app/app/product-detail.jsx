@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useApp } from '../../src/context/AppContext';
-import api from '../../src/api';
+import { useApp } from '../src/context/AppContext';
+import api from '../src/api';
 
 function MovementCard({ item }) {
   const fromText = item.from_emplacement
