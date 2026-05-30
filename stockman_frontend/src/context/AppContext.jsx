@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
+import { createContext, useContext, useState, useRef, useCallback } from 'react'
 import api from '../services/api'
 
 const AppContext = createContext()
@@ -15,14 +15,19 @@ function getStoredUser() {
 export function AppProvider({ children }) {
   const [user, setUserState] = useState(getStoredUser)
   const [token, setTokenState] = useState(localStorage.getItem('token'))
+  const [selectedWarehouse, setSelectedWarehouse] = useState(null)
   const [selectedEmplacement, setSelectedEmplacement] = useState(null)
   const [selectedProduit, setSelectedProduit] = useState(null)
 
   const productsCache = useRef(new Map())
 
+  const [warehouses, setWarehouses] = useState([])
+  const [warehousesLoading, setWarehousesLoading] = useState(false)
+  const [warehousesError, setWarehousesError] = useState(null)
+  const warehousesLoaded = useRef(false)
+
   const [emplacements, setEmplacements] = useState([])
   const [emplacementsLoading, setEmplacementsLoading] = useState(false)
-  const emplacementsLoaded = useRef(false)
 
   const setToken = (value) => {
     setTokenState(value)
@@ -60,33 +65,49 @@ export function AppProvider({ children }) {
     return productsCache.current.get(barcode) || null
   }, [])
 
-  const loadEmplacements = useCallback(async () => {
-    if (emplacementsLoaded.current) return
-    setEmplacementsLoading(true)
+  const loadWarehouses = useCallback(async () => {
+    if (warehousesLoaded.current) return
+    setWarehousesLoading(true)
+    setWarehousesError(null)
     try {
       const res = await api.get('/emplacements')
+      setWarehouses(res.data)
+      warehousesLoaded.current = true
+    } catch (err) {
+      setWarehousesError(err.response?.data?.message || err.message || 'Erreur lors du chargement')
+    } finally {
+      setWarehousesLoading(false)
+    }
+  }, [])
+
+  const refreshWarehouses = useCallback(async () => {
+    warehousesLoaded.current = false
+    await loadWarehouses()
+  }, [loadWarehouses])
+
+  const loadEmplacements = useCallback(async (warehouseId) => {
+    setEmplacementsLoading(true)
+    setEmplacements([])
+    try {
+      const res = await api.get(`/warehouses/${warehouseId}/emplacements`)
       setEmplacements(res.data)
-      emplacementsLoaded.current = true
     } catch {
-      // silently fail, component will handle
+      setEmplacements([])
     } finally {
       setEmplacementsLoading(false)
     }
   }, [])
 
-  const refreshEmplacements = useCallback(async () => {
-    emplacementsLoaded.current = false
-    await loadEmplacements()
-  }, [loadEmplacements])
-
   return (
     <AppContext.Provider value={{
       user, setUser,
       token, setToken,
+      selectedWarehouse, setSelectedWarehouse,
       selectedEmplacement, setSelectedEmplacement,
       selectedProduit, setSelectedProduit,
       cacheProduct, cacheProducts, findCached,
-      emplacements, emplacementsLoading, loadEmplacements, refreshEmplacements,
+      warehouses, warehousesLoading, warehousesError, loadWarehouses, refreshWarehouses,
+      emplacements, emplacementsLoading, loadEmplacements,
     }}>
       {children}
     </AppContext.Provider>

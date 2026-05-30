@@ -22,7 +22,7 @@ export default function LoginScreen() {
     setError('');
     try {
       await login(username.trim(), password);
-      router.replace('/(tabs)/emplacements');
+      router.replace('/(tabs)/entrepots');
     } catch (err) {
       if (err.message === 'Non authentifié' || String(err).includes('401')) {
         setError('Identifiants incorrects');

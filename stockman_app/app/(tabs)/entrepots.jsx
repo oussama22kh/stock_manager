@@ -21,10 +21,10 @@ export default function EntrepotsScreen() {
   }, [loadWarehouses]);
 
   useEffect(() => {
-    if (selectedWarehouse && !showWarehouses && emplacements.length === 0) {
+    if (selectedWarehouse && !showWarehouses) {
       loadEmplacements(selectedWarehouse.id);
     }
-  }, [selectedWarehouse, showWarehouses]);
+  }, [selectedWarehouse, showWarehouses, loadEmplacements]);
 
   const handleWarehouseSelect = (warehouse) => {
     setSelectedWarehouse(warehouse);

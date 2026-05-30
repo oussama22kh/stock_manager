@@ -86,6 +86,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const logout = useCallback(async () => {
+    try { await api.post('/logout'); } catch {}
     try { await SecureStore.deleteItemAsync(TOKEN_KEY); } catch {}
     setToken(null);
     setTokenState(null);
@@ -140,6 +141,7 @@ export function AppProvider({ children }) {
 
   const loadEmplacements = useCallback(async (warehouseId) => {
     setEmplacementsLoading(true);
+    setEmplacements([]);
     try {
       const data = await api.get(`/warehouses/${warehouseId}/emplacements`);
       setEmplacements(data);
