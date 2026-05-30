@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet, RefreshControl, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 import api from '../../src/api';
 import SearchBar from '../../src/components/SearchBar';
+import SelectionBadge from '../../src/components/SelectionBadge';
 
 function SkeletonCard() {
   return (
@@ -25,12 +26,18 @@ export default function ProduitsScreen() {
   const [scanError, setScanError] = useState('');
   const [error, setError] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [scannerLoaded, setScannerLoaded] = useState(false);
+  const [scannerFailed, setScannerFailed] = useState(false);
   const scanLoadAttempted = useRef(false);
 
+  const [movePrompt, setMovePrompt] = useState(null);
+
   const {
-    selectedEmplacement, setSelectedProduit,
+    selectedEmplacement, selectedWarehouse,
+    setSelectedProduit, setSelectedEmplacement,
     cacheProduct, cacheProducts, findCached,
+    invalidateProductCache,
   } = useApp();
   const router = useRouter();
 
@@ -45,8 +52,11 @@ export default function ProduitsScreen() {
       scanLoadAttempted.current = true;
       try {
         _BarcodeScanner = require('../../src/components/BarcodeScanner').default;
-      } catch {}
-      setScannerLoaded(true);
+        setScannerLoaded(true);
+      } catch {
+        setScannerFailed(true);
+        setScannerLoaded(true);
+      }
     }
     if (tab === 'search') {
       setSearchQuery('');
@@ -56,7 +66,7 @@ export default function ProduitsScreen() {
     }
   }, [tab]);
 
-  const handleSearch = useCallback(async (query) => {
+  const handleSearch = useCallback(async (query, skipCache = false) => {
     setSearchQuery(query);
     if (!query.trim()) {
       setFilteredProduits([]);
@@ -69,7 +79,7 @@ export default function ProduitsScreen() {
     try {
       const data = await api.get(`/produits?search=${encodeURIComponent(query)}`);
       const results = data.filter(p => p.emplacement_id !== selectedEmplacement?.id);
-      cacheProducts(results);
+      if (!skipCache) cacheProducts(results);
       setFilteredProduits(results);
       setHasSearched(true);
     } catch (err) {
@@ -79,9 +89,40 @@ export default function ProduitsScreen() {
     }
   }, [selectedEmplacement, cacheProducts]);
 
-  const handleProductClick = (product) => {
-    setSelectedProduit(product);
-    router.push('/confirmation');
+  const onRefresh = useCallback(async () => {
+    if (tab === 'search' && searchQuery.trim()) {
+      setRefreshing(true);
+      await handleSearch(searchQuery, true);
+      setRefreshing(false);
+    }
+  }, [tab, searchQuery, handleSearch]);
+
+  const handleProductSelect = (product) => {
+    if (product.emplacement_id && product.emplacement_id !== selectedEmplacement?.id) {
+      setMovePrompt({
+        product,
+        currentEmplacementNom: product.emplacement_nom,
+        currentWarehouseNom: product.warehouse_nom,
+        targetEmplacementNom: selectedEmplacement.name,
+        targetWarehouseNom: selectedWarehouse?.name,
+      });
+    } else {
+      setSelectedProduit(product);
+      router.push('/product-detail');
+    }
+  };
+
+  const handleConfirmMove = () => {
+    if (movePrompt) {
+      invalidateProductCache(movePrompt.product.code_produit);
+      setSelectedProduit(movePrompt.product);
+      setMovePrompt(null);
+      router.push('/confirmation');
+    }
+  };
+
+  const handleCancelMove = () => {
+    setMovePrompt(null);
   };
 
   const handleScan = async (code) => {
@@ -92,6 +133,17 @@ export default function ProduitsScreen() {
       if (cached.emplacement_id === selectedEmplacement?.id) {
         setScanError('Ce produit est déjà dans cet emplacement');
         return true;
+      }
+      if (cached.emplacement_id) {
+        invalidateProductCache(code);
+        setMovePrompt({
+          product: cached,
+          currentEmplacementNom: cached.emplacement_nom,
+          currentWarehouseNom: cached.warehouse_nom,
+          targetEmplacementNom: selectedEmplacement.name,
+          targetWarehouseNom: selectedWarehouse?.name,
+        });
+        return false;
       }
       setSelectedProduit(cached);
       router.push('/confirmation');
@@ -104,6 +156,16 @@ export default function ProduitsScreen() {
       if (data.emplacement_id === selectedEmplacement?.id) {
         setScanError('Ce produit est déjà dans cet emplacement');
         return true;
+      }
+      if (data.emplacement_id) {
+        setMovePrompt({
+          product: data,
+          currentEmplacementNom: data.emplacement_nom,
+          currentWarehouseNom: data.warehouse_nom,
+          targetEmplacementNom: selectedEmplacement.name,
+          targetWarehouseNom: selectedWarehouse?.name,
+        });
+        return false;
       }
       setSelectedProduit(data);
       router.push('/confirmation');
@@ -125,9 +187,7 @@ export default function ProduitsScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Produits</Text>
-        <Text style={styles.emplacementBadge}>
-          {selectedEmplacement.name}
-        </Text>
+        <SelectionBadge />
       </View>
 
       <View style={styles.tabBar}>
@@ -154,19 +214,27 @@ export default function ProduitsScreen() {
       ) : null}
 
       {scanError ? (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{scanError}</Text>
+        <View style={styles.warningBanner}>
+          <Text style={styles.warningText}>{scanError}</Text>
           <TouchableOpacity onPress={() => setScanError('')}>
             <Text style={styles.errorClose}>✕</Text>
           </TouchableOpacity>
         </View>
       ) : null}
 
-      {tab === 'scan' && _BarcodeScanner && (
+      {tab === 'scan' && scannerLoaded && _BarcodeScanner && (
         <_BarcodeScanner onScan={handleScan} />
       )}
 
-      {tab === 'scan' && !_BarcodeScanner && (
+      {tab === 'scan' && scannerLoaded && scannerFailed && (
+        <View style={styles.scannerFailed}>
+          <Text style={styles.scannerFailedIcon}>📷❌</Text>
+          <Text style={styles.scannerFailedText}>Le scanner n'a pas pu être chargé</Text>
+          <Text style={styles.scannerFailedSubtext}>Utilisez la recherche ou redémarrez l'application</Text>
+        </View>
+      )}
+
+      {tab === 'scan' && !scannerLoaded && (
         <View style={styles.scannerLoading}>
           <ActivityIndicator size="large" color="#f86126" />
         </View>
@@ -184,6 +252,12 @@ export default function ProduitsScreen() {
               <SkeletonCard />
               <SkeletonCard />
             </View>
+          ) : !hasSearched && !searchQuery ? (
+            <View style={styles.preSearch}>
+              <Text style={styles.preSearchIcon}>🔍</Text>
+              <Text style={styles.preSearchText}>Recherchez un produit</Text>
+              <Text style={styles.preSearchSubtext}>par nom ou code-barres</Text>
+            </View>
           ) : hasSearched && filteredProduits.length === 0 ? (
             <Text style={styles.emptyText}>Aucun produit trouvé</Text>
           ) : filteredProduits.length > 0 ? (
@@ -193,19 +267,61 @@ export default function ProduitsScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={styles.productCard}
-                  onPress={() => handleProductClick(item)}
+                  onPress={() => handleProductSelect(item)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.productName}>{item.nom_produit}</Text>
-                  <Text style={styles.productCode}>{item.code_produit}</Text>
+                  <View style={styles.productRow}>
+                    <View style={styles.productInfo}>
+                      <Text style={styles.productName}>{item.nom_produit}</Text>
+                      <Text style={styles.productCode}>{item.code_produit}</Text>
+                    </View>
+                    <Text style={styles.productArrow}>›</Text>
+                  </View>
                 </TouchableOpacity>
               )}
               contentContainerStyle={styles.productList}
               showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#f86126']} />
+              }
             />
           ) : null}
         </View>
       )}
+
+      <Modal visible={!!movePrompt} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Produit déjà placé</Text>
+            <Text style={styles.modalProductName}>{movePrompt?.product?.nom_produit}</Text>
+
+            <View style={styles.moveRow}>
+              <View style={styles.moveBox}>
+                <Text style={styles.moveLabel}>Actuellement</Text>
+                <Text style={styles.moveValue}>{movePrompt?.currentEmplacementNom}</Text>
+                <Text style={styles.moveSubvalue}>{movePrompt?.currentWarehouseNom}</Text>
+              </View>
+              <Text style={styles.moveArrow}>→</Text>
+              <View style={styles.moveBox}>
+                <Text style={styles.moveLabel}>Nouvel emplacement</Text>
+                <Text style={styles.moveValue}>{movePrompt?.targetEmplacementNom}</Text>
+                <Text style={styles.moveSubvalue}>{movePrompt?.targetWarehouseNom}</Text>
+              </View>
+            </View>
+
+            <Text style={styles.modalQuestion}>Voulez-vous le déplacer ?</Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancel} onPress={handleCancelMove}>
+                <Text style={styles.modalCancelText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalConfirm} onPress={handleConfirmMove}>
+                <Text style={styles.modalConfirmText}>Déplacer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -227,16 +343,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: '#333',
-  },
-  emplacementBadge: {
-    fontSize: 13,
-    color: '#002f5e',
-    fontWeight: '600',
-    backgroundColor: '#e8f0fe',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    overflow: 'hidden',
   },
   tabBar: {
     flexDirection: 'row',
@@ -279,6 +385,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     flex: 1,
   },
+  warningBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff7ed',
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  warningText: {
+    color: '#c2410c',
+    fontSize: 13,
+    flex: 1,
+  },
   errorClose: {
     color: '#dc2626',
     fontSize: 18,
@@ -293,6 +415,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 40,
   },
+  scannerFailed: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 24,
+  },
+  scannerFailedIcon: {
+    fontSize: 40,
+    marginBottom: 12,
+  },
+  scannerFailedText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+  },
+  scannerFailedSubtext: {
+    fontSize: 13,
+    color: '#888',
+    textAlign: 'center',
+    marginTop: 6,
+  },
   skeleton: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -306,6 +452,28 @@ const styles = StyleSheet.create({
   },
   skeletonGrid: {
     marginTop: 8,
+  },
+  preSearch: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 60,
+  },
+  preSearchIcon: {
+    fontSize: 40,
+    marginBottom: 12,
+  },
+  preSearchText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+  },
+  preSearchSubtext: {
+    fontSize: 13,
+    color: '#888',
+    textAlign: 'center',
+    marginTop: 4,
   },
   emptyText: {
     textAlign: 'center',
@@ -324,6 +492,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
   },
+  productRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  productInfo: {
+    flex: 1,
+  },
   productName: {
     fontSize: 15,
     fontWeight: '600',
@@ -335,7 +510,111 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontFamily: 'monospace',
   },
+  productArrow: {
+    fontSize: 24,
+    color: '#ccc',
+    marginLeft: 8,
+  },
   productList: {
     paddingBottom: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '88%',
+    maxWidth: 360,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#c2410c',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  modalProductName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  moveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  moveBox: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 12,
+  },
+  moveLabel: {
+    fontSize: 11,
+    color: '#999',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  moveValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+  },
+  moveSubvalue: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  moveArrow: {
+    fontSize: 24,
+    color: '#f86126',
+    fontWeight: '700',
+    marginHorizontal: 8,
+  },
+  modalQuestion: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalCancel: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 15,
+    color: '#666',
+    fontWeight: '500',
+  },
+  modalConfirm: {
+    flex: 1,
+    backgroundColor: '#f86126',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalConfirmText: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '600',
   },
 });

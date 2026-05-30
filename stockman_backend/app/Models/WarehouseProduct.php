@@ -13,6 +13,13 @@ class WarehouseProduct extends Model
 
     public $timestamps = true;
 
+    protected function casts(): array
+    {
+        return [
+            'assigned_at' => 'datetime',
+        ];
+    }
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
@@ -23,8 +30,8 @@ class WarehouseProduct extends Model
         return $this->belongsTo(Emplacement::class);
     }
 
-    public function warehouse(): BelongsTo
+    public function assignedBy(): BelongsTo
     {
-        return $this->belongsTo(Warehouse::class, 'emplacement_id');
+        return $this->belongsTo(User::class, 'assigned_by');
     }
 }

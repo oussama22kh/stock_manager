@@ -35,6 +35,33 @@ export default function RootLayout() {
               headerTintColor: '#fff',
             }}
           />
+          <Stack.Screen
+            name="emplacement-products"
+            options={{
+              title: 'Produits de l\'emplacement',
+              presentation: 'card',
+              headerStyle: { backgroundColor: '#002f5e' },
+              headerTintColor: '#fff',
+            }}
+          />
+          <Stack.Screen
+            name="product-detail"
+            options={{
+              title: 'Détail produit',
+              presentation: 'card',
+              headerStyle: { backgroundColor: '#002f5e' },
+              headerTintColor: '#fff',
+            }}
+          />
+          <Stack.Screen
+            name="settings"
+            options={{
+              title: 'Paramètres',
+              presentation: 'card',
+              headerStyle: { backgroundColor: '#002f5e' },
+              headerTintColor: '#fff',
+            }}
+          />
           <Stack.Screen name="login" options={{ headerShown: false }} />
         </Stack>
       </AuthGuard>

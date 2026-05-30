@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet } from 'react-native';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Modal, StyleSheet, Animated } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 
 export default function BarcodeScanner({ onScan }) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -8,7 +9,9 @@ export default function BarcodeScanner({ onScan }) {
   const [cameraError, setCameraError] = useState('');
   const [showManual, setShowManual] = useState(false);
   const [manualCode, setManualCode] = useState('');
+  const [scanFeedback, setScanFeedback] = useState(null);
   const scannedRef = useRef(false);
+  const feedbackOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     return () => {
@@ -16,9 +19,20 @@ export default function BarcodeScanner({ onScan }) {
     };
   }, []);
 
+  const showFeedback = useCallback((color, text) => {
+    setScanFeedback({ color, text });
+    Animated.sequence([
+      Animated.timing(feedbackOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
+      Animated.delay(1200),
+      Animated.timing(feedbackOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setScanFeedback(null));
+  }, [feedbackOpacity]);
+
   const handleBarcodeScanned = async ({ data }) => {
     if (scannedRef.current) return;
     scannedRef.current = true;
+
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
 
     const keepOpen = await onScan(data);
 
@@ -33,12 +47,13 @@ export default function BarcodeScanner({ onScan }) {
 
   const handleManualSubmit = async () => {
     if (manualCode.trim()) {
+      const code = manualCode.trim();
       setShowManual(false);
-      const keepOpen = await onScan(manualCode.trim());
+      setManualCode('');
+      const keepOpen = await onScan(code);
       if (keepOpen) {
         setShowManual(true);
       }
-      setManualCode('');
     }
   };
 
@@ -86,6 +101,12 @@ export default function BarcodeScanner({ onScan }) {
             </Text>
           </View>
         )}
+
+        {scanFeedback && (
+          <Animated.View style={[styles.feedbackOverlay, { opacity: feedbackOpacity, backgroundColor: scanFeedback.color }]}>
+            <Text style={styles.feedbackText}>{scanFeedback.text}</Text>
+          </Animated.View>
+        )}
       </View>
 
       <View style={styles.buttonRow}>
@@ -121,6 +142,8 @@ export default function BarcodeScanner({ onScan }) {
               autoFocus
               autoCapitalize="none"
               autoCorrect={false}
+              onSubmitEditing={handleManualSubmit}
+              returnKeyType="done"
             />
             <View style={styles.modalButtons}>
               <TouchableOpacity
@@ -300,5 +323,23 @@ const styles = StyleSheet.create({
   },
   modalDisabled: {
     opacity: 0.5,
+  },
+  feedbackOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedbackText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });

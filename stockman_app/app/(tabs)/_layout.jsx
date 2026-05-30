@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import { Text, TouchableOpacity } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { useApp } from '../../src/context/AppContext';
 
 function TabIcon({ label, focused }) {
@@ -14,21 +14,21 @@ function TabIcon({ label, focused }) {
   );
 }
 
-function LogoutButton({ tintColor }) {
+function HeaderRightButtons({ tintColor }) {
   const { logout } = useApp();
   const router = useRouter();
 
-  const handleLogout = async () => {
-    await logout();
-    router.replace('/login');
-  };
-
   return (
-    <TouchableOpacity onPress={handleLogout} style={{ marginRight: 8 }}>
-      <Text style={{ color: tintColor, fontSize: 14, fontWeight: '600' }}>
-        Déconnexion
-      </Text>
-    </TouchableOpacity>
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
+      <TouchableOpacity onPress={() => router.push('/settings')} style={{ marginRight: 14 }}>
+        <Text style={{ color: tintColor, fontSize: 18 }}>⚙</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={async () => { await logout(); router.replace('/login'); }}>
+        <Text style={{ color: tintColor, fontSize: 14, fontWeight: '600' }}>
+          Déconnexion
+        </Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -38,7 +38,7 @@ export default function TabLayout() {
       screenOptions={{
         headerStyle: { backgroundColor: '#002f5e' },
         headerTintColor: '#fff',
-        headerRight: ({ tintColor }) => <LogoutButton tintColor={tintColor} />,
+        headerRight: ({ tintColor }) => <HeaderRightButtons tintColor={tintColor} />,
         tabBarActiveTintColor: '#f86126',
         tabBarInactiveTintColor: '#666',
         tabBarStyle: { paddingBottom: 4, height: 56 },

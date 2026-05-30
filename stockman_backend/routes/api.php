@@ -15,6 +15,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/produits', [ProduitController::class, 'index']);
     Route::get('/produits/code/{code}', [ProduitController::class, 'findByCode']);
     Route::patch('/produits/{id}/emplacement', [ProduitController::class, 'assignEmplacement']);
+    Route::get('/produits/{id}/movements', [ProduitController::class, 'movements']);
+    Route::get('/emplacements/{id}/products', [ProduitController::class, 'productsByEmplacement']);
     Route::get('/stats', [AdminController::class, 'stats']);
 
     Route::prefix('admin')->group(function () {

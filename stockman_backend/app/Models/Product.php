@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
@@ -15,6 +16,11 @@ class Product extends Model
         return $this->belongsToMany(Emplacement::class, 'warehouse_products', 'product_id', 'emplacement_id')
             ->withPivot(['assigned_by', 'assigned_at'])
             ->withTimestamps();
+    }
+
+    public function movements(): HasMany
+    {
+        return $this->hasMany(StockMovement::class)->latest('moved_at');
     }
 
     protected function name(): Attribute

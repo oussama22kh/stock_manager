@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { View, TextInput, StyleSheet } from 'react-native';
+import { View, TextInput, TouchableOpacity, Text, StyleSheet } from 'react-native';
 
 export default function SearchBar({ onSearch, placeholder = 'Rechercher...' }) {
   const [value, setValue] = useState('');
@@ -11,6 +11,12 @@ export default function SearchBar({ onSearch, placeholder = 'Rechercher...' }) {
     debounceRef.current = setTimeout(() => {
       onSearch(text);
     }, 300);
+  }, [onSearch]);
+
+  const handleClear = useCallback(() => {
+    setValue('');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    onSearch('');
   }, [onSearch]);
 
   return (
@@ -26,6 +32,11 @@ export default function SearchBar({ onSearch, placeholder = 'Rechercher...' }) {
         autoCorrect={false}
         returnKeyType="search"
       />
+      {value.length > 0 && (
+        <TouchableOpacity onPress={handleClear} style={styles.clearButton}>
+          <Text style={styles.clearIcon}>✕</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -51,5 +62,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#333',
     paddingVertical: 0,
+  },
+  clearButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  clearIcon: {
+    fontSize: 14,
+    color: '#999',
+    fontWeight: '700',
   },
 });

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
-import api from '../../src/api';
+import SelectionBadge from '../../src/components/SelectionBadge';
 
 export default function EntrepotsScreen() {
   const {
@@ -10,11 +10,13 @@ export default function EntrepotsScreen() {
     selectedEmplacement, setSelectedEmplacement,
     warehouses, warehousesLoading, warehousesError,
     loadWarehouses, refreshWarehouses,
-    emplacements, emplacementsLoading,
+    emplacements, emplacementsLoading, emplacementsError,
     loadEmplacements,
   } = useApp();
   const router = useRouter();
   const [showWarehouses, setShowWarehouses] = useState(true);
+  const [refreshingWarehouses, setRefreshingWarehouses] = useState(false);
+  const [refreshingEmplacements, setRefreshingEmplacements] = useState(false);
 
   useEffect(() => {
     loadWarehouses();
@@ -28,25 +30,47 @@ export default function EntrepotsScreen() {
 
   const handleWarehouseSelect = (warehouse) => {
     setSelectedWarehouse(warehouse);
+    setSelectedEmplacement(null);
     setShowWarehouses(false);
   };
 
   const handleEmplacementSelect = (emplacement) => {
     setSelectedEmplacement(emplacement);
+  };
+
+  const handleScanProduct = () => {
     router.push('/(tabs)/produits');
+  };
+
+  const handleViewProducts = () => {
+    router.push('/emplacement-products');
   };
 
   const handleBackToWarehouses = () => {
     setShowWarehouses(true);
     setSelectedWarehouse(null);
+    setSelectedEmplacement(null);
   };
+
+  const onRefreshWarehouses = useCallback(async () => {
+    setRefreshingWarehouses(true);
+    await refreshWarehouses();
+    setRefreshingWarehouses(false);
+  }, [refreshWarehouses]);
+
+  const onRefreshEmplacements = useCallback(async () => {
+    if (!selectedWarehouse) return;
+    setRefreshingEmplacements(true);
+    await loadEmplacements(selectedWarehouse.id);
+    setRefreshingEmplacements(false);
+  }, [selectedWarehouse, loadEmplacements]);
 
   const warehouseCount = useCallback((w) => {
     if (!w.emplacements) return 0;
     return w.emplacements.reduce((sum, e) => sum + (e.products_count || 0), 0);
   }, []);
 
-  if (warehousesLoading) {
+  if (warehousesLoading && warehouses.length === 0) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#f86126" />
@@ -55,7 +79,7 @@ export default function EntrepotsScreen() {
     );
   }
 
-  if (warehousesError) {
+  if (warehousesError && warehouses.length === 0) {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>{warehousesError}</Text>
@@ -66,11 +90,18 @@ export default function EntrepotsScreen() {
     );
   }
 
-  return (
-    <View style={styles.container}>
-      {showWarehouses ? (
-        <>
-          <Text style={styles.title}>Sélectionnez un entrepôt</Text>
+  if (showWarehouses) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Sélectionnez un entrepôt</Text>
+
+        {warehouses.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>🏭</Text>
+            <Text style={styles.emptyText}>Aucun entrepôt disponible</Text>
+            <Text style={styles.emptySubtext}>Contactez un administrateur</Text>
+          </View>
+        ) : (
           <FlatList
             data={warehouses}
             keyExtractor={(item) => String(item.id)}
@@ -96,48 +127,82 @@ export default function EntrepotsScreen() {
             )}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshingWarehouses} onRefresh={onRefreshWarehouses} colors={['#f86126']} />
+            }
           />
-        </>
-      ) : (
-        <>
-          <View style={styles.breadcrumb}>
-            <TouchableOpacity onPress={handleBackToWarehouses}>
-              <Text style={styles.breadcrumbLink}>← Entrepôts</Text>
-            </TouchableOpacity>
-            <Text style={styles.breadcrumbSeparator}>/</Text>
-            <Text style={styles.breadcrumbCurrent}>{selectedWarehouse?.name}</Text>
-          </View>
+        )}
+      </View>
+    );
+  }
 
-          {emplacementsLoading ? (
-            <View style={styles.centered}>
-              <ActivityIndicator size="large" color="#f86126" />
-            </View>
-          ) : (
-            <FlatList
-              data={emplacements}
-              keyExtractor={(item) => String(item.id)}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.card, selectedEmplacement?.id === item.id && styles.cardSelected]}
-                  onPress={() => handleEmplacementSelect(item)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.cardTitle}>{item.name}</Text>
-                  {item.location ? (
-                    <Text style={styles.cardSubtitle}>{item.location}</Text>
-                  ) : null}
-                  <View style={styles.cardFooter}>
-                    <Text style={styles.countBadge}>
-                      {item.products_count || 0} produit{(item.products_count || 0) !== 1 ? 's' : ''}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-              contentContainerStyle={styles.list}
-              showsVerticalScrollIndicator={false}
-            />
+  return (
+    <View style={styles.container}>
+      <View style={styles.breadcrumb}>
+        <TouchableOpacity onPress={handleBackToWarehouses}>
+          <Text style={styles.breadcrumbLink}>← Entrepôts</Text>
+        </TouchableOpacity>
+        <Text style={styles.breadcrumbSeparator}>/</Text>
+        <Text style={styles.breadcrumbCurrent}>{selectedWarehouse?.name}</Text>
+      </View>
+
+      <SelectionBadge />
+
+      {emplacementsLoading && emplacements.length === 0 ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#f86126" />
+        </View>
+      ) : emplacementsError && emplacements.length === 0 ? (
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>{emplacementsError}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={onRefreshEmplacements}>
+            <Text style={styles.retryText}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
+      ) : emplacements.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyIcon}>📍</Text>
+          <Text style={styles.emptyText}>Aucun emplacement dans cet entrepôt</Text>
+          <Text style={styles.emptySubtext}>Ajoutez des emplacements depuis l'administration</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={emplacements}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[styles.card, selectedEmplacement?.id === item.id && styles.cardEmplacementSelected]}
+              onPress={() => handleEmplacementSelect(item)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cardTitle}>{item.name}</Text>
+              {item.location ? (
+                <Text style={styles.cardSubtitle}>{item.location}</Text>
+              ) : null}
+              <View style={styles.cardFooter}>
+                <Text style={styles.countBadge}>
+                  {item.products_count || 0} produit{(item.products_count || 0) !== 1 ? 's' : ''}
+                </Text>
+              </View>
+            </TouchableOpacity>
           )}
-        </>
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshingEmplacements} onRefresh={onRefreshEmplacements} colors={['#f86126']} />
+          }
+        />
+      )}
+
+      {selectedEmplacement && (
+        <View style={styles.actionBar}>
+          <TouchableOpacity style={styles.actionButton} onPress={handleScanProduct}>
+            <Text style={styles.actionButtonText}>📷 Scanner un produit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButtonOutline} onPress={handleViewProducts}>
+            <Text style={styles.actionButtonOutlineText}>📋 Voir les produits</Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -155,6 +220,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
+    padding: 20,
   },
   loadingText: {
     marginTop: 12,
@@ -170,7 +236,7 @@ const styles = StyleSheet.create({
   breadcrumb: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
@@ -210,6 +276,10 @@ const styles = StyleSheet.create({
   cardSelected: {
     borderColor: '#f86126',
     backgroundColor: '#fff8f5',
+  },
+  cardEmplacementSelected: {
+    borderColor: '#002f5e',
+    backgroundColor: '#e8f0fe',
   },
   cardTitle: {
     fontSize: 17,
@@ -257,6 +327,62 @@ const styles = StyleSheet.create({
   retryText: {
     color: '#fff',
     fontSize: 15,
+    fontWeight: '600',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 60,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+  },
+  actionBar: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    backgroundColor: '#f5f5f5',
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: '#f86126',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  actionButtonOutline: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#002f5e',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  actionButtonOutlineText: {
+    color: '#002f5e',
+    fontSize: 14,
     fontWeight: '600',
   },
 });

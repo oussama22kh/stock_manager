@@ -32,7 +32,9 @@ export function AppProvider({ children }) {
 
   const [emplacements, setEmplacements] = useState([]);
   const [emplacementsLoading, setEmplacementsLoading] = useState(false);
+  const [emplacementsError, setEmplacementsError] = useState(null);
 
+  const lastWarehouseId = useRef(null);
   const productsCache = useRef(new Map());
 
   const handleLogout = useRef(() => {});
@@ -140,16 +142,29 @@ export function AppProvider({ children }) {
   }, [loadWarehouses]);
 
   const loadEmplacements = useCallback(async (warehouseId) => {
+    lastWarehouseId.current = warehouseId;
     setEmplacementsLoading(true);
+    setEmplacementsError(null);
     setEmplacements([]);
     try {
       const data = await api.get(`/warehouses/${warehouseId}/emplacements`);
       setEmplacements(data);
-    } catch {
+    } catch (err) {
+      setEmplacementsError(err.message || 'Erreur lors du chargement des emplacements');
       setEmplacements([]);
     } finally {
       setEmplacementsLoading(false);
     }
+  }, []);
+
+  const refreshEmplacements = useCallback(async () => {
+    if (lastWarehouseId.current) {
+      await loadEmplacements(lastWarehouseId.current);
+    }
+  }, [loadEmplacements]);
+
+  const invalidateProductCache = useCallback((barcode) => {
+    productsCache.current.delete(barcode);
   }, []);
 
   return (
@@ -164,9 +179,9 @@ export function AppProvider({ children }) {
       selectedWarehouse, setSelectedWarehouse,
       selectedEmplacement, setSelectedEmplacement,
       selectedProduit, setSelectedProduit,
-      cacheProduct, cacheProducts, findCached,
+      cacheProduct, cacheProducts, findCached, invalidateProductCache,
       warehouses, warehousesLoading, warehousesError, loadWarehouses, refreshWarehouses,
-      emplacements, emplacementsLoading, loadEmplacements,
+      emplacements, emplacementsLoading, emplacementsError, loadEmplacements, refreshEmplacements,
     }}>
       {children}
     </AppContext.Provider>
