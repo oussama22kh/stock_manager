@@ -40,6 +40,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/warehouses/{id}', [AdminController::class, 'updateWarehouse']);
         Route::delete('/warehouses/{id}', [AdminController::class, 'destroyWarehouse']);
 
+        Route::post('/users/import', [AdminController::class, 'importUsers']);
+        Route::get('/users/export', [AdminController::class, 'exportUsers']);
+
         Route::post('/products/import', [AdminController::class, 'importProducts']);
         Route::get('/products/export', [AdminController::class, 'exportProducts']);
         Route::post('/emplacements/import', [AdminController::class, 'importEmplacements']);

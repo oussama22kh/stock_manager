@@ -36,14 +36,14 @@ class AdminController extends Controller
     public function storeUser(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
             'username' => 'required|string|max:255|unique:users',
             'password' => 'required|string|min:6',
             'role' => ['required', 'string', Rule::in(['admin', 'agent'])],
         ]);
 
         $validated['password'] = Hash::make($validated['password']);
+        $validated['name'] = $validated['username'];
+        $validated['email'] = $validated['username'].'@stockman.app';
 
         $user = User::create($validated);
 
@@ -59,8 +59,6 @@ class AdminController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'email' => ['sometimes', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'username' => ['sometimes', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
             'password' => 'sometimes|string|min:6',
             'role' => ['sometimes', 'string', Rule::in(['admin', 'agent'])],
@@ -86,6 +84,132 @@ class AdminController extends Controller
         $user->delete();
 
         return response()->json(['message' => 'User deleted']);
+    }
+
+    public function importUsers(Request $request): JsonResponse
+    {
+        if (! $request->hasFile('file')) {
+            return response()->json(['message' => 'Aucun fichier fourni'], 422);
+        }
+
+        $file = $request->file('file');
+        $handle = fopen($file->getPathname(), 'r');
+        $header = fgetcsv($handle);
+
+        if (! $header || ! in_array('username', $header) || ! in_array('password', $header) || ! in_array('role', $header)) {
+            fclose($handle);
+
+            return response()->json(['message' => 'CSV invalide. En-têtes requis: username,password,role'], 422);
+        }
+
+        $usernameIdx = array_search('username', $header);
+        $passwordIdx = array_search('password', $header);
+        $roleIdx = array_search('role', $header);
+
+        $created = 0;
+        $skipped = 0;
+        $errors = [];
+        $batch = [];
+        $line = 1;
+
+        DB::beginTransaction();
+
+        try {
+            while (($row = fgetcsv($handle)) !== false) {
+                $line++;
+                $username = trim($row[$usernameIdx] ?? '');
+                $password = trim($row[$passwordIdx] ?? '');
+                $role = trim($row[$roleIdx] ?? '');
+
+                if (empty($username) || empty($password) || empty($role)) {
+                    $errors[] = "Ligne {$line}: username, password et role sont requis";
+
+                    continue;
+                }
+
+                if (! in_array($role, ['admin', 'agent'])) {
+                    $errors[] = "Ligne {$line}: role '{$role}' invalide (admin ou agent)";
+
+                    continue;
+                }
+
+                $batch[] = [
+                    'username' => $username,
+                    'password' => Hash::make($password),
+                    'role' => $role,
+                    'name' => $username,
+                    'email' => $username.'@stockman.app',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+
+                if (count($batch) >= 500) {
+                    $result = $this->flushUserBatch($batch, $skipped);
+                    $created += $result['created'];
+                    $batch = [];
+                }
+            }
+
+            if (! empty($batch)) {
+                $result = $this->flushUserBatch($batch, $skipped);
+                $created += $result['created'];
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            fclose($handle);
+
+            return response()->json(['message' => 'Erreur lors de l\'import: '.$e->getMessage()], 500);
+        }
+
+        fclose($handle);
+
+        return response()->json([
+            'message' => "Import terminé: {$created} créé(s), {$skipped} existant(s) ignoré(s)",
+            'created' => $created,
+            'skipped' => $skipped,
+            'errors' => $errors,
+        ]);
+    }
+
+    private function flushUserBatch(array $batch, int &$skipped): array
+    {
+        $usernames = array_column($batch, 'username');
+        $existing = User::whereIn('username', $usernames)->pluck('username')->map(fn ($v) => strtolower($v))->toArray();
+
+        $toInsert = [];
+        foreach ($batch as $row) {
+            if (in_array(strtolower($row['username']), $existing)) {
+                $skipped++;
+            } else {
+                $toInsert[] = $row;
+            }
+        }
+
+        if (! empty($toInsert)) {
+            User::insert($toInsert);
+        }
+
+        return ['created' => count($toInsert)];
+    }
+
+    public function exportUsers(): StreamedResponse
+    {
+        $users = User::all(['username', 'role']);
+
+        return response()->streamDownload(function () use ($users) {
+            $output = fopen('php://output', 'w');
+            fputcsv($output, ['username', 'password', 'role']);
+
+            foreach ($users as $u) {
+                fputcsv($output, [$u->username, '', $u->role]);
+            }
+
+            fclose($output);
+        }, 'users_'.now()->format('Y-m-d_His').'.csv', [
+            'Content-Type' => 'text/csv; charset=utf-8',
+        ]);
     }
 
     // ─── Products ───
