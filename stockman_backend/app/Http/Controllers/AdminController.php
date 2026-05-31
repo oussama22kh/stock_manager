@@ -847,6 +847,161 @@ class AdminController extends Controller
         return response()->json(['deleted' => $count]);
     }
 
+    // ─── Warehouse Assignment ───
+
+    public function getUserWarehouses(int $id): JsonResponse
+    {
+        $user = User::find($id);
+
+        if (! $user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        return response()->json($user->warehouses->pluck('id'));
+    }
+
+    public function setUserWarehouses(Request $request, int $id): JsonResponse
+    {
+        $user = User::find($id);
+
+        if (! $user) {
+            return response()->json(['message' => 'User not found'], 404);
+        }
+
+        $validated = $request->validate([
+            'warehouse_ids' => 'array',
+            'warehouse_ids.*' => 'integer|exists:warehouses,id',
+        ]);
+
+        $user->warehouses()->sync($validated['warehouse_ids'] ?? []);
+
+        return response()->json(['message' => 'Entrepôts mis à jour']);
+    }
+
+    // ─── Bulk Update ───
+
+    public function bulkUpdateUsers(Request $request): JsonResponse
+    {
+        $request->validate([
+            'all_matching' => 'boolean',
+            'search' => 'nullable|string',
+            'ids' => $request->boolean('all_matching') ? 'nullable' : 'required|array',
+            'ids.*' => 'integer',
+            'fields' => 'required|array',
+            'fields.role' => ['nullable', 'string', Rule::in(['admin', 'agent'])],
+        ]);
+
+        $query = User::query();
+
+        if ($request->boolean('all_matching')) {
+            if ($search = $request->get('search')) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('username', 'like', "%{$search}%");
+                });
+            }
+        } else {
+            $query->whereIn('id', $request->ids);
+        }
+
+        $updates = array_filter($request->fields, fn ($v) => $v !== null && $v !== '');
+        $count = $query->update($updates);
+
+        return response()->json(['updated' => $count]);
+    }
+
+    public function bulkUpdateProducts(Request $request): JsonResponse
+    {
+        $request->validate([
+            'all_matching' => 'boolean',
+            'search' => 'nullable|string',
+            'ids' => $request->boolean('all_matching') ? 'nullable' : 'required|array',
+            'ids.*' => 'integer',
+            'fields' => 'required|array',
+            'fields.description' => 'nullable|string',
+        ]);
+
+        $query = Product::query();
+
+        if ($request->boolean('all_matching')) {
+            if ($search = $request->get('search')) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('barcode', 'like', "%{$search}%");
+                });
+            }
+        } else {
+            $query->whereIn('id', $request->ids);
+        }
+
+        $updates = array_filter($request->fields, fn ($v) => $v !== null && $v !== '');
+        $count = $query->update($updates);
+
+        return response()->json(['updated' => $count]);
+    }
+
+    public function bulkUpdateWarehouses(Request $request): JsonResponse
+    {
+        $request->validate([
+            'all_matching' => 'boolean',
+            'search' => 'nullable|string',
+            'ids' => $request->boolean('all_matching') ? 'nullable' : 'required|array',
+            'ids.*' => 'integer',
+            'fields' => 'required|array',
+            'fields.location' => 'nullable|string|max:255',
+        ]);
+
+        $query = Warehouse::query();
+
+        if ($request->boolean('all_matching')) {
+            if ($search = $request->get('search')) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('location', 'like', "%{$search}%");
+                });
+            }
+        } else {
+            $query->whereIn('id', $request->ids);
+        }
+
+        $updates = array_filter($request->fields, fn ($v) => $v !== null && $v !== '');
+        $count = $query->update($updates);
+
+        return response()->json(['updated' => $count]);
+    }
+
+    public function bulkUpdateEmplacements(Request $request): JsonResponse
+    {
+        $request->validate([
+            'all_matching' => 'boolean',
+            'search' => 'nullable|string',
+            'ids' => $request->boolean('all_matching') ? 'nullable' : 'required|array',
+            'ids.*' => 'integer',
+            'fields' => 'required|array',
+            'fields.location' => 'nullable|string|max:255',
+            'fields.warehouse_id' => 'nullable|integer|exists:warehouses,id',
+        ]);
+
+        $query = Emplacement::query();
+
+        if ($request->boolean('all_matching')) {
+            if ($search = $request->get('search')) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('location', 'like', "%{$search}%");
+                });
+            }
+        } else {
+            $query->whereIn('id', $request->ids);
+        }
+
+        $updates = array_filter($request->fields, fn ($v) => $v !== null && $v !== '');
+        $count = $query->update($updates);
+
+        return response()->json(['updated' => $count]);
+    }
+
     public function stats(): JsonResponse
     {
         $totalProducts = Product::count();

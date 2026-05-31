@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Warehouse extends Model
 {
@@ -11,9 +13,14 @@ class Warehouse extends Model
 
     protected $appends = ['products_count'];
 
-    public function emplacements()
+    public function emplacements(): HasMany
     {
         return $this->hasMany(Emplacement::class);
+    }
+
+    public function agents(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class)->withTimestamps();
     }
 
     public function getProductsCountAttribute(): int

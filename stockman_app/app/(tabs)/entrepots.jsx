@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet, RefreshControl } from 'react-native';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet, RefreshControl, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useApp } from '../../src/context/AppContext';
 import SelectionBadge from '../../src/components/SelectionBadge';
@@ -17,6 +17,7 @@ export default function EntrepotsScreen() {
   const [showWarehouses, setShowWarehouses] = useState(true);
   const [refreshingWarehouses, setRefreshingWarehouses] = useState(false);
   const [refreshingEmplacements, setRefreshingEmplacements] = useState(false);
+  const [emplacementSearch, setEmplacementSearch] = useState('');
 
   useEffect(() => {
     loadWarehouses();
@@ -32,6 +33,7 @@ export default function EntrepotsScreen() {
     setSelectedWarehouse(warehouse);
     setSelectedEmplacement(null);
     setShowWarehouses(false);
+    setEmplacementSearch('');
   };
 
   const handleEmplacementSelect = (emplacement) => {
@@ -50,6 +52,7 @@ export default function EntrepotsScreen() {
     setShowWarehouses(true);
     setSelectedWarehouse(null);
     setSelectedEmplacement(null);
+    setEmplacementSearch('');
   };
 
   const onRefreshWarehouses = useCallback(async () => {
@@ -136,6 +139,15 @@ export default function EntrepotsScreen() {
     );
   }
 
+  const filteredEmplacements = useMemo(() => {
+    if (!emplacementSearch.trim()) return emplacements
+    const q = emplacementSearch.trim().toLowerCase()
+    return emplacements.filter(e =>
+      e.name.toLowerCase().includes(q) ||
+      (e.location && e.location.toLowerCase().includes(q))
+    )
+  }, [emplacements, emplacementSearch])
+
   return (
     <View style={styles.container}>
       <View style={styles.breadcrumb}>
@@ -148,6 +160,22 @@ export default function EntrepotsScreen() {
 
       <SelectionBadge />
 
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Rechercher un emplacement..."
+          placeholderTextColor="#999"
+          value={emplacementSearch}
+          onChangeText={setEmplacementSearch}
+          clearButtonMode="while-editing"
+        />
+        {emplacementSearch !== '' && (
+          <TouchableOpacity onPress={() => setEmplacementSearch('')} style={styles.searchClear}>
+            <Text style={styles.searchClearText}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {emplacementsLoading && emplacements.length === 0 ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#f86126" />
@@ -159,15 +187,19 @@ export default function EntrepotsScreen() {
             <Text style={styles.retryText}>Réessayer</Text>
           </TouchableOpacity>
         </View>
-      ) : emplacements.length === 0 ? (
+      ) : filteredEmplacements.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>📍</Text>
-          <Text style={styles.emptyText}>Aucun emplacement dans cet entrepôt</Text>
-          <Text style={styles.emptySubtext}>Ajoutez des emplacements depuis l'administration</Text>
+          <Text style={styles.emptyIcon}>{emplacementSearch ? '🔍' : '📍'}</Text>
+          <Text style={styles.emptyText}>
+            {emplacementSearch ? 'Aucun emplacement trouvé' : 'Aucun emplacement dans cet entrepôt'}
+          </Text>
+          <Text style={styles.emptySubtext}>
+            {emplacementSearch ? 'Essayez un autre terme de recherche' : 'Ajoutez des emplacements depuis l\'administration'}
+          </Text>
         </View>
       ) : (
         <FlatList
-          data={emplacements}
+          data={filteredEmplacements}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => (
             <TouchableOpacity
@@ -383,6 +415,33 @@ const styles = StyleSheet.create({
   actionButtonOutlineText: {
     color: '#002f5e',
     fontSize: 14,
+    fontWeight: '600',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#333',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  searchClear: {
+    marginLeft: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  searchClearText: {
+    fontSize: 16,
+    color: '#999',
     fontWeight: '600',
   },
 });

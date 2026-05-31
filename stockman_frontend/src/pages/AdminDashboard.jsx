@@ -18,6 +18,11 @@ export default function AdminDashboard() {
   const [selectAllMatching, setSelectAllMatching] = useState(false)
   const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', onConfirm: () => {} })
   const [bulkLoading, setBulkLoading] = useState(false)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
+  const [bulkEditFormData, setBulkEditFormData] = useState({})
+  const [bulkEditLoading, setBulkEditLoading] = useState(false)
+  const [userWarehouseIds, setUserWarehouseIds] = useState([])
+  const [allWarehouses, setAllWarehouses] = useState([])
 
   const fileInputRef = useRef(null)
 
@@ -42,6 +47,9 @@ export default function AdminDashboard() {
       exportEndpoint: '/admin/users/export',
       templateHeaders: 'username,password,role',
       templateExample: 'agent1,password123,agent',
+      bulkFields: [
+        { key: 'role', label: 'Rôle', type: 'select', options: [{ value: '', label: '— Inchangé —' }, { value: 'agent', label: 'Agent' }, { value: 'admin', label: 'Admin' }] },
+      ],
     },
     products: {
       label: 'Produits',
@@ -61,6 +69,9 @@ export default function AdminDashboard() {
       exportEndpoint: '/admin/products/export',
       templateHeaders: 'name,barcode,description',
       templateExample: 'Produit A,123456,Description du produit',
+      bulkFields: [
+        { key: 'description', label: 'Description', type: 'textarea' },
+      ],
     },
     warehouses: {
       label: 'Entrepôts',
@@ -79,6 +90,9 @@ export default function AdminDashboard() {
       exportEndpoint: '/admin/warehouses/export',
       templateHeaders: 'name,location',
       templateExample: 'Entrepôt A,Bâtiment principal',
+      bulkFields: [
+        { key: 'location', label: 'Localisation', type: 'text' },
+      ],
     },
     emplacements: {
       label: 'Emplacements',
@@ -99,6 +113,10 @@ export default function AdminDashboard() {
       exportEndpoint: '/admin/emplacements/export',
       templateHeaders: 'warehouse_name,name,location',
       templateExample: 'Entrepôt A,Allée 1 - Étagère A,Bâtiment principal',
+      bulkFields: [
+        { key: 'warehouse_id', label: 'Entrepôt', type: 'dynamicSelect' },
+        { key: 'location', label: 'Localisation', type: 'text' },
+      ],
     },
   }
 
@@ -139,12 +157,25 @@ export default function AdminDashboard() {
   }, [fetchItems])
 
   useEffect(() => {
-    if (activeTab === 'emplacements') {
+    if (activeTab === 'emplacements' || activeTab === 'users') {
       api.get('/admin/warehouses?per_page=100')
-        .then(res => setWarehouses(res.data.data || res.data))
-        .catch(() => setWarehouses([]))
+        .then(res => {
+          const list = res.data.data || res.data
+          setAllWarehouses(list)
+          if (activeTab === 'emplacements') setWarehouses(list)
+        })
+        .catch(() => { setAllWarehouses([]); setWarehouses([]) })
     }
   }, [activeTab])
+
+  const fetchUserWarehouses = useCallback(async (userId) => {
+    try {
+      const res = await api.get(`/admin/users/${userId}/warehouses`)
+      setUserWarehouseIds(res.data || [])
+    } catch {
+      setUserWarehouseIds([])
+    }
+  }, [])
 
   const handleSearch = useCallback((query) => {
     setSearchQuery(query)
@@ -178,6 +209,10 @@ export default function AdminDashboard() {
     setEditingItem(item)
     setModalOpen(true)
     setError('')
+    setUserWarehouseIds([])
+    if (activeTab === 'users') {
+      fetchUserWarehouses(item.id)
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -194,13 +229,21 @@ export default function AdminDashboard() {
     }
 
     try {
+      let userId
       if (editingItem) {
         await api.put(`${config.endpoint}/${editingItem.id}`, payload)
+        userId = editingItem.id
         setSuccess(`${config.label} mis à jour avec succès`)
       } else {
-        await api.post(config.endpoint, payload)
+        const res = await api.post(config.endpoint, payload)
+        userId = res.data.id
         setSuccess(`${config.label} créé avec succès`)
       }
+
+      if (activeTab === 'users' && userId) {
+        await api.put(`/admin/users/${userId}/warehouses`, { warehouse_ids: userWarehouseIds })
+      }
+
       setModalOpen(false)
       fetchItems()
     } catch (err) {
@@ -357,6 +400,48 @@ export default function AdminDashboard() {
     })
   }, [activeTab, clearSelection, fetchItems])
 
+  const openBulkEditModal = useCallback(() => {
+    const defaults = {}
+    const config = tabConfig[activeTab]
+    if (config.bulkFields) {
+      config.bulkFields.forEach(f => {
+        defaults[f.key] = ''
+      })
+    }
+    setBulkEditFormData(defaults)
+    setBulkEditOpen(true)
+    setError('')
+  }, [activeTab])
+
+  const handleBulkEditSubmit = useCallback(async (e) => {
+    if (e) e.preventDefault()
+    setBulkEditLoading(true)
+    setError('')
+    setSuccess('')
+
+    const config = tabConfig[activeTab]
+    const fields = {}
+    Object.entries(bulkEditFormData).forEach(([k, v]) => {
+      if (v !== '' && v !== undefined) fields[k] = v
+    })
+
+    const payload = selectAllMatching
+      ? { all_matching: true, search: searchQuery.trim(), fields }
+      : { ids: Array.from(selectedIds), fields }
+
+    try {
+      const res = await api.patch(`${config.endpoint}/bulk`, payload)
+      setBulkEditOpen(false)
+      setSuccess(`${res.data.updated} ${config.label.toLowerCase()} mis à jour`)
+      clearSelection()
+      fetchItems()
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erreur lors de la modification')
+    } finally {
+      setBulkEditLoading(false)
+    }
+  }, [activeTab, bulkEditFormData, selectAllMatching, selectedIds, searchQuery, clearSelection, fetchItems])
+
   const downloadTemplate = () => {
     const config = tabConfig[activeTab]
     const csvContent = `${config.templateHeaders}\n${config.templateExample}\n`
@@ -468,6 +553,12 @@ export default function AdminDashboard() {
             )}
             <button onClick={clearSelection} className="text-sm text-gray-500 hover:underline">
               Effacer la sélection
+            </button>
+            <button
+              onClick={openBulkEditModal}
+              className="px-3 py-1.5 bg-[#002f5e] text-white rounded-lg hover:bg-[#001a33] text-sm font-medium"
+            >
+              Modifier la sélection ({selectionCount})
             </button>
             <button
               onClick={handleBulkDelete}
@@ -700,6 +791,34 @@ export default function AdminDashboard() {
                   )
                 })}
 
+                {activeTab === 'users' && ((!editingItem && formData.role === 'agent') || (editingItem && (formData.role || editingItem.role) === 'agent')) && allWarehouses.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Entrepôts assignés
+                    </label>
+                    <div className="max-h-40 overflow-y-auto border rounded-lg p-2 space-y-1">
+                      {allWarehouses.map(w => (
+                        <label key={w.id} className="flex items-center gap-2 py-1 px-1 hover:bg-gray-50 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={userWarehouseIds.includes(w.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setUserWarehouseIds(prev => [...prev, w.id])
+                              } else {
+                                setUserWarehouseIds(prev => prev.filter(id => id !== w.id))
+                              }
+                            }}
+                            className="w-4 h-4 rounded border-gray-300 text-[#f86126] focus:ring-[#f86126]"
+                          />
+                          <span className="text-sm text-gray-700">{w.name}</span>
+                          {w.location && <span className="text-xs text-gray-400">— {w.location}</span>}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
@@ -713,6 +832,84 @@ export default function AdminDashboard() {
                       className="flex-1 py-2 min-h-[44px] bg-[#f86126] text-white rounded-lg hover:bg-[#d94d1a]"
                   >
                     {editingItem ? 'Enregistrer' : 'Créer'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Edit Modal */}
+      {bulkEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h2 className="text-lg font-bold text-gray-800 mb-4">
+                Modifier {selectionCount} {currentConfig.label.toLowerCase()}
+              </h2>
+
+              <form onSubmit={handleBulkEditSubmit} className="space-y-4">
+                {currentConfig.bulkFields && currentConfig.bulkFields.map(field => (
+                  <div key={field.key}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {field.label}
+                    </label>
+                    {field.type === 'textarea' ? (
+                      <textarea
+                        value={bulkEditFormData[field.key] || ''}
+                        onChange={e => setBulkEditFormData({ ...bulkEditFormData, [field.key]: e.target.value })}
+                        placeholder="Laisser vide pour ne pas modifier"
+                        className="w-full px-3 py-2 min-h-[44px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126] min-h-[80px]"
+                      />
+                    ) : field.type === 'select' ? (
+                      <select
+                        value={bulkEditFormData[field.key] || ''}
+                        onChange={e => setBulkEditFormData({ ...bulkEditFormData, [field.key]: e.target.value })}
+                        className="w-full px-3 py-2 min-h-[44px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126]"
+                      >
+                        {field.options.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    ) : field.type === 'dynamicSelect' ? (
+                      <select
+                        value={bulkEditFormData[field.key] || ''}
+                        onChange={e => setBulkEditFormData({ ...bulkEditFormData, [field.key]: e.target.value })}
+                        className="w-full px-3 py-2 min-h-[44px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126]"
+                      >
+                        <option value="">-- Inchangé --</option>
+                        {allWarehouses.map(w => (
+                          <option key={w.id} value={w.id}>{w.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={bulkEditFormData[field.key] || ''}
+                        onChange={e => setBulkEditFormData({ ...bulkEditFormData, [field.key]: e.target.value })}
+                        placeholder="Laisser vide pour ne pas modifier"
+                        className="w-full px-3 py-2 min-h-[44px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#f86126]"
+                      />
+                    )}
+                  </div>
+                ))}
+                <p className="text-xs text-gray-400">Seuls les champs remplis seront modifiés.</p>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setBulkEditOpen(false)}
+                    className="flex-1 py-2 min-h-[44px] border rounded-lg text-gray-600 hover:bg-gray-50"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={bulkEditLoading}
+                    className="flex-1 py-2 min-h-[44px] bg-[#002f5e] text-white rounded-lg hover:bg-[#001a33] disabled:opacity-50"
+                  >
+                    {bulkEditLoading ? 'Modification...' : 'Appliquer'}
                   </button>
                 </div>
               </form>
