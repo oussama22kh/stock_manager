@@ -12,6 +12,7 @@ export default function EntrepotsScreen() {
     loadWarehouses, refreshWarehouses,
     emplacements, emplacementsLoading, emplacementsError,
     loadEmplacements,
+    user,
   } = useApp();
   const router = useRouter();
   const [showWarehouses, setShowWarehouses] = useState(true);
@@ -73,6 +74,15 @@ export default function EntrepotsScreen() {
     return w.emplacements.reduce((sum, e) => sum + (e.products_count || 0), 0);
   }, []);
 
+  const filteredEmplacements = useMemo(() => {
+    if (!emplacementSearch.trim()) return emplacements;
+    const q = emplacementSearch.trim().toLowerCase();
+    return emplacements.filter(e =>
+      e.name.toLowerCase().includes(q) ||
+      (e.location && e.location.toLowerCase().includes(q))
+    );
+  }, [emplacements, emplacementSearch]);
+
   if (warehousesLoading && warehouses.length === 0) {
     return (
       <View style={styles.centered}>
@@ -96,7 +106,9 @@ export default function EntrepotsScreen() {
   if (showWarehouses) {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>Sélectionnez un entrepôt</Text>
+        <Text style={styles.title}>
+          {user?.role === 'agent' ? 'Mes entrepôts' : 'Sélectionnez un entrepôt'}
+        </Text>
 
         {warehouses.length === 0 ? (
           <View style={styles.emptyState}>
@@ -138,15 +150,6 @@ export default function EntrepotsScreen() {
       </View>
     );
   }
-
-  const filteredEmplacements = useMemo(() => {
-    if (!emplacementSearch.trim()) return emplacements
-    const q = emplacementSearch.trim().toLowerCase()
-    return emplacements.filter(e =>
-      e.name.toLowerCase().includes(q) ||
-      (e.location && e.location.toLowerCase().includes(q))
-    )
-  }, [emplacements, emplacementSearch])
 
   return (
     <View style={styles.container}>

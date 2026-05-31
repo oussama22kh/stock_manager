@@ -55,6 +55,13 @@ export function AppProvider({ children }) {
           setBaseUrl(normalized);
           setApiUrlState(normalized);
         }
+        if (storedToken && storedApiUrl) {
+          try {
+            const data = await api.get('/me');
+            setUser(data);
+          } catch {
+          }
+        }
       } catch {
       } finally {
         setIsLoading(false);

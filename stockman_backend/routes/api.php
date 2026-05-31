@@ -10,6 +10,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:lo
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/me', [AuthController::class, 'me']);
     Route::get('/emplacements', [EmplacementController::class, 'index']);
     Route::get('/warehouses/{warehouseId}/emplacements', [EmplacementController::class, 'byWarehouse']);
     Route::get('/produits', [ProduitController::class, 'index']);
