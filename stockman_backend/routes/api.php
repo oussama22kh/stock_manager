@@ -22,37 +22,34 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('admin')->group(function () {
         Route::get('/users', [AdminController::class, 'users']);
         Route::post('/users', [AdminController::class, 'storeUser']);
+        Route::delete('/users/bulk', [AdminController::class, 'destroyUsersBulk']);
+        Route::post('/users/import', [AdminController::class, 'importUsers']);
+        Route::get('/users/export', [AdminController::class, 'exportUsers']);
         Route::put('/users/{id}', [AdminController::class, 'updateUser']);
         Route::delete('/users/{id}', [AdminController::class, 'destroyUser']);
 
         Route::get('/products', [AdminController::class, 'products']);
         Route::post('/products', [AdminController::class, 'storeProduct']);
+        Route::delete('/products/bulk', [AdminController::class, 'destroyProductsBulk']);
+        Route::post('/products/import', [AdminController::class, 'importProducts']);
+        Route::get('/products/export', [AdminController::class, 'exportProducts']);
         Route::put('/products/{id}', [AdminController::class, 'updateProduct']);
         Route::delete('/products/{id}', [AdminController::class, 'destroyProduct']);
 
-        Route::get('/emplacements', [AdminController::class, 'emplacements']);
-        Route::post('/emplacements', [AdminController::class, 'storeEmplacement']);
-        Route::put('/emplacements/{id}', [AdminController::class, 'updateEmplacement']);
-        Route::delete('/emplacements/{id}', [AdminController::class, 'destroyEmplacement']);
-
         Route::get('/warehouses', [AdminController::class, 'warehouses']);
         Route::post('/warehouses', [AdminController::class, 'storeWarehouse']);
+        Route::delete('/warehouses/bulk', [AdminController::class, 'destroyWarehousesBulk']);
+        Route::post('/warehouses/import', [AdminController::class, 'importWarehouses']);
+        Route::get('/warehouses/export', [AdminController::class, 'exportWarehouses']);
         Route::put('/warehouses/{id}', [AdminController::class, 'updateWarehouse']);
         Route::delete('/warehouses/{id}', [AdminController::class, 'destroyWarehouse']);
 
-        Route::post('/users/import', [AdminController::class, 'importUsers']);
-        Route::get('/users/export', [AdminController::class, 'exportUsers']);
-
-        Route::post('/products/import', [AdminController::class, 'importProducts']);
-        Route::get('/products/export', [AdminController::class, 'exportProducts']);
+        Route::get('/emplacements', [AdminController::class, 'emplacements']);
+        Route::post('/emplacements', [AdminController::class, 'storeEmplacement']);
+        Route::delete('/emplacements/bulk', [AdminController::class, 'destroyEmplacementsBulk']);
         Route::post('/emplacements/import', [AdminController::class, 'importEmplacements']);
         Route::get('/emplacements/export', [AdminController::class, 'exportEmplacements']);
-        Route::post('/warehouses/import', [AdminController::class, 'importWarehouses']);
-        Route::get('/warehouses/export', [AdminController::class, 'exportWarehouses']);
-
-        Route::delete('/users/bulk', [AdminController::class, 'destroyUsersBulk']);
-        Route::delete('/products/bulk', [AdminController::class, 'destroyProductsBulk']);
-        Route::delete('/warehouses/bulk', [AdminController::class, 'destroyWarehousesBulk']);
-        Route::delete('/emplacements/bulk', [AdminController::class, 'destroyEmplacementsBulk']);
+        Route::put('/emplacements/{id}', [AdminController::class, 'updateEmplacement']);
+        Route::delete('/emplacements/{id}', [AdminController::class, 'destroyEmplacement']);
     });
 });
