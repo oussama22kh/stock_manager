@@ -47,5 +47,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/products/export', [AdminController::class, 'exportProducts']);
         Route::post('/emplacements/import', [AdminController::class, 'importEmplacements']);
         Route::get('/emplacements/export', [AdminController::class, 'exportEmplacements']);
+        Route::post('/warehouses/import', [AdminController::class, 'importWarehouses']);
+        Route::get('/warehouses/export', [AdminController::class, 'exportWarehouses']);
+
+        Route::delete('/users/bulk', [AdminController::class, 'destroyUsersBulk']);
+        Route::delete('/products/bulk', [AdminController::class, 'destroyProductsBulk']);
+        Route::delete('/warehouses/bulk', [AdminController::class, 'destroyWarehousesBulk']);
+        Route::delete('/emplacements/bulk', [AdminController::class, 'destroyEmplacementsBulk']);
     });
 });

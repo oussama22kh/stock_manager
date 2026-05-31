@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import api from '../services/api'
 import SearchBar from '../components/SearchBar'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('users')
@@ -13,6 +14,10 @@ export default function AdminDashboard() {
   const [importLoading, setImportLoading] = useState(false)
   const [pagination, setPagination] = useState({ currentPage: 1, lastPage: 1, total: 0 })
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [selectAllMatching, setSelectAllMatching] = useState(false)
+  const [confirmDialog, setConfirmDialog] = useState({ open: false, title: '', message: '', onConfirm: () => {} })
+  const [bulkLoading, setBulkLoading] = useState(false)
 
   const fileInputRef = useRef(null)
 
@@ -69,7 +74,11 @@ export default function AdminDashboard() {
         { key: 'location', label: 'Localisation' },
         { key: 'emplacements_count', label: 'Emplacements' },
       ],
-      importExport: false,
+      importExport: true,
+      importEndpoint: '/admin/warehouses/import',
+      exportEndpoint: '/admin/warehouses/export',
+      templateHeaders: 'name,location',
+      templateExample: 'Entrepôt A,Bâtiment principal',
     },
     emplacements: {
       label: 'Emplacements',
@@ -205,19 +214,6 @@ export default function AdminDashboard() {
     }
   }
 
-  const handleDelete = async (item) => {
-    if (!confirm(`Supprimer cet élément ?`)) return
-    setError('')
-    setSuccess('')
-    try {
-      await api.delete(`${tabConfig[activeTab].endpoint}/${item.id}`)
-      setSuccess('Supprimé avec succès')
-      fetchItems()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Erreur de suppression')
-    }
-  }
-
   const handleExport = async () => {
     setError('')
     try {
@@ -265,6 +261,101 @@ export default function AdminDashboard() {
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set())
+    setSelectAllMatching(false)
+  }, [])
+
+  const allPageSelected = useMemo(() => {
+    if (items.length === 0) return false
+    return items.every(item => selectedIds.has(item.id))
+  }, [items, selectedIds])
+
+  const toggleSelectAllPage = useCallback(() => {
+    if (allPageSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(items.map(item => item.id)))
+    }
+    setSelectAllMatching(false)
+  }, [allPageSelected, items])
+
+  const toggleSelectOne = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+    setSelectAllMatching(false)
+  }, [])
+
+  const toggleSelectAllMatching = useCallback(() => {
+    setSelectAllMatching(true)
+    setSelectedIds(new Set())
+  }, [])
+
+  const selectionCount = selectAllMatching ? pagination.total : selectedIds.size
+
+  const handleBulkDelete = useCallback(() => {
+    const config = tabConfig[activeTab]
+    const label = config.label.toLowerCase()
+    const payload = selectAllMatching
+      ? { all_matching: true, search: searchQuery.trim() }
+      : { ids: Array.from(selectedIds) }
+
+    setConfirmDialog({
+      open: true,
+      title: 'Suppression multiple',
+      message: `Supprimer ${selectionCount} ${label} ? Cette action est irréversible.`,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, open: false }))
+        setBulkLoading(true)
+        setError('')
+        setSuccess('')
+        try {
+          const res = await api.delete(`${config.endpoint}/bulk`, { data: payload })
+          setSuccess(`${res.data.deleted} ${label} supprimé(s)`)
+          clearSelection()
+          fetchItems()
+        } catch (err) {
+          setError(err.response?.data?.message || 'Erreur lors de la suppression')
+        } finally {
+          setBulkLoading(false)
+        }
+      },
+    })
+  }, [activeTab, selectAllMatching, selectedIds, searchQuery, selectionCount, clearSelection, fetchItems])
+
+  const handleSingleDelete = useCallback((item) => {
+    const config = tabConfig[activeTab]
+    const label = config.label.toLowerCase()
+    const name = item.name || item.username || item.barcode || `#${item.id}`
+
+    setConfirmDialog({
+      open: true,
+      title: 'Confirmer la suppression',
+      message: `Supprimer « ${name} » ? Cette action est irréversible.`,
+      confirmLabel: 'Supprimer',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, open: false }))
+        setError('')
+        setSuccess('')
+        try {
+          await api.delete(`${config.endpoint}/${item.id}`)
+          setSuccess('Supprimé avec succès')
+          clearSelection()
+          fetchItems()
+        } catch (err) {
+          setError(err.response?.data?.message || 'Erreur de suppression')
+        }
+      },
+    })
+  }, [activeTab, clearSelection, fetchItems])
 
   const downloadTemplate = () => {
     const config = tabConfig[activeTab]
@@ -337,7 +428,7 @@ export default function AdminDashboard() {
         {Object.entries(tabConfig).map(([key, config]) => (
           <button
             key={key}
-            onClick={() => { setActiveTab(key); setSearchQuery(''); setError(''); setSuccess('') }}
+            onClick={() => { setActiveTab(key); setSearchQuery(''); setError(''); setSuccess(''); clearSelection() }}
             className={`px-4 py-2 min-h-[44px] text-sm font-medium rounded-t-lg transition-colors ${
               activeTab === key
                 ? 'bg-[#e6eef7] text-[#002f5e] border-b-2 border-[#f86126]'
@@ -358,6 +449,37 @@ export default function AdminDashboard() {
         />
       </div>
 
+      {!loading && selectionCount > 0 && (
+        <div className="mb-4 p-3 bg-[#e6eef7] border border-[#002f5e] rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <span className="text-sm text-[#002f5e] font-medium">
+            {selectAllMatching
+              ? `${pagination.total} résultat(s) correspondant(s) sélectionné(s)`
+              : `${selectedIds.size} sélectionné(s) sur cette page`
+            }
+          </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {!selectAllMatching && (
+              <button
+                onClick={toggleSelectAllMatching}
+                className="text-sm text-[#f86126] hover:underline font-medium"
+              >
+                Sélectionner les {pagination.total} résultats correspondants
+              </button>
+            )}
+            <button onClick={clearSelection} className="text-sm text-gray-500 hover:underline">
+              Effacer la sélection
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkLoading}
+              className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium disabled:opacity-50"
+            >
+              {bulkLoading ? 'Suppression...' : `Supprimer la sélection (${selectionCount})`}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       {loading ? (
         <div className="text-center py-12 text-gray-400">Chargement...</div>
@@ -370,6 +492,14 @@ export default function AdminDashboard() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
                   <tr>
+                    <th className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        onChange={toggleSelectAllPage}
+                        checked={allPageSelected}
+                        className="w-4 h-4 rounded border-gray-300 text-[#f86126] focus:ring-[#f86126]"
+                      />
+                    </th>
                     {currentConfig.columns.map(col => (
                       <th key={col.key} className="px-4 py-3 text-left font-medium text-gray-700">
                         {col.label}
@@ -381,6 +511,14 @@ export default function AdminDashboard() {
                 <tbody className="divide-y divide-gray-100">
                   {items.map(item => (
                     <tr key={item.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          onChange={() => toggleSelectOne(item.id)}
+                          checked={selectAllMatching || selectedIds.has(item.id)}
+                          className="w-4 h-4 rounded border-gray-300 text-[#f86126] focus:ring-[#f86126]"
+                        />
+                      </td>
                       {currentConfig.columns.map(col => (
                         <td key={col.key} className="px-4 py-3 text-gray-700">
                           {item[col.key] || '—'}
@@ -394,7 +532,7 @@ export default function AdminDashboard() {
                           Modifier
                         </button>
                         <button
-                          onClick={() => handleDelete(item)}
+                          onClick={() => handleSingleDelete(item)}
                           className="text-red-500 hover:text-red-700 font-medium py-2 inline-block"
                         >
                           Supprimer
@@ -437,6 +575,15 @@ export default function AdminDashboard() {
           <div className="md:hidden space-y-3">
             {items.map(item => (
               <div key={item.id} className="bg-white rounded-xl border p-4 space-y-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <input
+                    type="checkbox"
+                    onChange={() => toggleSelectOne(item.id)}
+                    checked={selectAllMatching || selectedIds.has(item.id)}
+                    className="w-4 h-4 rounded border-gray-300 text-[#f86126] focus:ring-[#f86126]"
+                  />
+                  <span className="text-xs text-gray-400">#{item.id}</span>
+                </div>
                 {currentConfig.columns.map(col => (
                   <div key={col.key} className="flex justify-between items-center">
                     <span className="text-xs text-gray-500 uppercase">{col.label}</span>
@@ -451,7 +598,7 @@ export default function AdminDashboard() {
                     Modifier
                   </button>
                   <button
-                    onClick={() => handleDelete(item)}
+                    onClick={() => handleSingleDelete(item)}
                     className="flex-1 py-2 min-h-[44px] text-sm text-red-500 border border-red-300 rounded-lg font-medium"
                   >
                     Supprimer
@@ -573,6 +720,15 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, open: false }))}
+      />
     </div>
   )
 }

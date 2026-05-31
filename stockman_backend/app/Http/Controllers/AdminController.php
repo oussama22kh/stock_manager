@@ -619,6 +619,234 @@ class AdminController extends Controller
         ]);
     }
 
+    // ─── Warehouses CSV Import / Export ───
+
+    public function importWarehouses(Request $request): JsonResponse
+    {
+        if (! $request->hasFile('file')) {
+            return response()->json(['message' => 'Aucun fichier fourni'], 422);
+        }
+
+        $file = $request->file('file');
+        $handle = fopen($file->getPathname(), 'r');
+        $header = fgetcsv($handle);
+
+        if (! $header || ! in_array('name', $header)) {
+            fclose($handle);
+
+            return response()->json(['message' => 'CSV invalide. En-têtes requis: name,location'], 422);
+        }
+
+        $nameIdx = array_search('name', $header);
+        $locIdx = array_search('location', $header);
+
+        $created = 0;
+        $skipped = 0;
+        $errors = [];
+        $batch = [];
+        $line = 1;
+
+        DB::beginTransaction();
+
+        try {
+            while (($row = fgetcsv($handle)) !== false) {
+                $line++;
+                $name = trim($row[$nameIdx] ?? '');
+                $location = $locIdx !== false ? trim($row[$locIdx] ?? '') : null;
+
+                if (empty($name)) {
+                    $errors[] = "Ligne {$line}: name est requis";
+
+                    continue;
+                }
+
+                $batch[] = [
+                    'name' => $name,
+                    'location' => $location,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+
+                if (count($batch) >= 500) {
+                    $result = $this->flushWarehouseBatch($batch, $skipped);
+                    $created += $result['created'];
+                    $batch = [];
+                }
+            }
+
+            if (! empty($batch)) {
+                $result = $this->flushWarehouseBatch($batch, $skipped);
+                $created += $result['created'];
+            }
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            fclose($handle);
+
+            return response()->json(['message' => 'Erreur lors de l\'import: '.$e->getMessage()], 500);
+        }
+
+        fclose($handle);
+
+        return response()->json([
+            'message' => "Import terminé: {$created} créé(s), {$skipped} existant(s) ignoré(s)",
+            'created' => $created,
+            'skipped' => $skipped,
+            'errors' => $errors,
+        ]);
+    }
+
+    private function flushWarehouseBatch(array $batch, int &$skipped): array
+    {
+        $names = array_column($batch, 'name');
+        $existing = Warehouse::whereIn('name', $names)->pluck('name')->map(fn ($v) => strtolower($v))->toArray();
+
+        $toInsert = [];
+        foreach ($batch as $row) {
+            if (in_array(strtolower($row['name']), $existing)) {
+                $skipped++;
+            } else {
+                $toInsert[] = $row;
+            }
+        }
+
+        if (! empty($toInsert)) {
+            Warehouse::insert($toInsert);
+        }
+
+        return ['created' => count($toInsert)];
+    }
+
+    public function exportWarehouses(): StreamedResponse
+    {
+        $warehouses = Warehouse::withCount('emplacements')->get();
+
+        return response()->streamDownload(function () use ($warehouses) {
+            $output = fopen('php://output', 'w');
+            fputcsv($output, ['name', 'location', 'emplacements_count']);
+
+            foreach ($warehouses as $w) {
+                fputcsv($output, [$w->name, $w->location ?? '', $w->emplacements_count]);
+            }
+
+            fclose($output);
+        }, 'warehouses_'.now()->format('Y-m-d_His').'.csv', [
+            'Content-Type' => 'text/csv; charset=utf-8',
+        ]);
+    }
+
+    // ─── Bulk Delete ───
+
+    public function destroyUsersBulk(Request $request): JsonResponse
+    {
+        $request->validate([
+            'all_matching' => 'boolean',
+            'search' => 'nullable|string',
+            'ids' => $request->boolean('all_matching') ? 'nullable' : 'required|array',
+            'ids.*' => 'integer',
+        ]);
+
+        if ($request->boolean('all_matching')) {
+            $query = User::query();
+            if ($search = $request->get('search')) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('username', 'like', "%{$search}%");
+                });
+            }
+            $count = $query->delete();
+
+            return response()->json(['deleted' => $count]);
+        }
+
+        $count = User::whereIn('id', $request->ids)->delete();
+
+        return response()->json(['deleted' => $count]);
+    }
+
+    public function destroyProductsBulk(Request $request): JsonResponse
+    {
+        $request->validate([
+            'all_matching' => 'boolean',
+            'search' => 'nullable|string',
+            'ids' => $request->boolean('all_matching') ? 'nullable' : 'required|array',
+            'ids.*' => 'integer',
+        ]);
+
+        if ($request->boolean('all_matching')) {
+            $query = Product::query();
+            if ($search = $request->get('search')) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('barcode', 'like', "%{$search}%");
+                });
+            }
+            $count = $query->delete();
+
+            return response()->json(['deleted' => $count]);
+        }
+
+        $count = Product::whereIn('id', $request->ids)->delete();
+
+        return response()->json(['deleted' => $count]);
+    }
+
+    public function destroyWarehousesBulk(Request $request): JsonResponse
+    {
+        $request->validate([
+            'all_matching' => 'boolean',
+            'search' => 'nullable|string',
+            'ids' => $request->boolean('all_matching') ? 'nullable' : 'required|array',
+            'ids.*' => 'integer',
+        ]);
+
+        if ($request->boolean('all_matching')) {
+            $query = Warehouse::query();
+            if ($search = $request->get('search')) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('location', 'like', "%{$search}%");
+                });
+            }
+            $count = $query->delete();
+
+            return response()->json(['deleted' => $count]);
+        }
+
+        $count = Warehouse::whereIn('id', $request->ids)->delete();
+
+        return response()->json(['deleted' => $count]);
+    }
+
+    public function destroyEmplacementsBulk(Request $request): JsonResponse
+    {
+        $request->validate([
+            'all_matching' => 'boolean',
+            'search' => 'nullable|string',
+            'ids' => $request->boolean('all_matching') ? 'nullable' : 'required|array',
+            'ids.*' => 'integer',
+        ]);
+
+        if ($request->boolean('all_matching')) {
+            $query = Emplacement::query();
+            if ($search = $request->get('search')) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                        ->orWhere('location', 'like', "%{$search}%");
+                });
+            }
+            $count = $query->delete();
+
+            return response()->json(['deleted' => $count]);
+        }
+
+        $count = Emplacement::whereIn('id', $request->ids)->delete();
+
+        return response()->json(['deleted' => $count]);
+    }
+
     public function stats(): JsonResponse
     {
         $totalProducts = Product::count();
