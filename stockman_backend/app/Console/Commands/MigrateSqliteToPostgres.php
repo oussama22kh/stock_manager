@@ -10,6 +10,7 @@ class MigrateSqliteToPostgres extends Command
 {
     protected $signature = 'db:migrate-sqlite-to-pgsql
                             {--source= : Path to the SQLite database file}
+                            {--json-source= : Path to a JSON dump file (alternative to --source)}
                             {--fresh : Truncate all PostgreSQL tables before migrating}
                             {--force : Skip confirmation prompt}';
 
@@ -29,10 +30,26 @@ class MigrateSqliteToPostgres extends Command
 
         $this->info('Starting SQLite to PostgreSQL data migration...');
 
-        $sqlitePath = $this->option('source') ?: config('database.connections.sqlite.database');
+        if ($this->option('json-source')) {
+            return $this->migrateFromJson();
+        }
+
+        if (! $this->option('source')) {
+            $this->error('Either --source or --json-source is required.');
+
+            return self::FAILURE;
+        }
+
+        $sqlitePath = $this->option('source');
 
         if (! file_exists($sqlitePath)) {
             $this->error("SQLite database not found at: {$sqlitePath}");
+
+            return self::FAILURE;
+        }
+
+        if (! $this->isValidSqliteFile($sqlitePath)) {
+            $this->error("File is not a valid SQLite database: {$sqlitePath}");
 
             return self::FAILURE;
         }
@@ -45,21 +62,19 @@ class MigrateSqliteToPostgres extends Command
             'foreign_key_constraints' => false,
         ]]);
 
-        $tables = $this->getMigratableTables();
+        $tables = $this->getOrderedTables();
 
         if ($this->option('fresh')) {
-            $this->line('  Truncating PostgreSQL tables...');
-            $this->disableForeignKeys();
-            foreach (array_reverse($tables) as $table) {
-                DB::connection(self::PGSQL_CONN)->table($table)->truncate();
-            }
-            $this->enableForeignKeys();
+            $this->truncatePgTables($tables);
         }
 
         $totalRows = 0;
+        $verification = [];
+
         foreach ($tables as $table) {
             try {
-                if (! $this->option('fresh') && DB::connection(self::PGSQL_CONN)->table($table)->count() > 0) {
+                $pgCount = DB::connection(self::PGSQL_CONN)->table($table)->count();
+                if (! $this->option('fresh') && $pgCount > 0) {
                     $this->line("  <fg=gray>{$table}: already has data (skipped)</>");
 
                     continue;
@@ -69,11 +84,15 @@ class MigrateSqliteToPostgres extends Command
                 $count = $rows->count();
                 if ($count === 0) {
                     $this->line("  <fg=gray>{$table}: 0 rows (skipped)</>");
+                    $verification[$table] = ['source' => 0, 'target' => $pgCount];
 
                     continue;
                 }
 
                 $rowsArray = $rows->map(fn ($row) => (array) $row)->toArray();
+                $pgColumns = $this->getPgColumns($table);
+                $this->normalizeRows($rowsArray, $pgColumns);
+
                 $this->disableForeignKeys();
 
                 foreach (array_chunk($rowsArray, 500) as $chunk) {
@@ -83,7 +102,85 @@ class MigrateSqliteToPostgres extends Command
                 $this->enableForeignKeys();
                 $this->resetSequence($table);
 
+                $newCount = DB::connection(self::PGSQL_CONN)->table($table)->count();
+                $delta = $this->option('fresh') ? $newCount - $pgCount : $newCount;
+
+                $this->line("  <fg=green>{$table}: {$delta} rows</>");
+                $verification[$table] = ['source' => $count, 'target' => $delta];
+                $totalRows += $delta;
+            } catch (\Exception $e) {
+                $this->warn("  <fg=yellow>{$table}: failed — {$e->getMessage()}</>");
+            }
+        }
+
+        $this->info("Migration complete. {$totalRows} total rows migrated.");
+
+        return $this->verifyAndReport($verification);
+    }
+
+    private function migrateFromJson(): int
+    {
+        $jsonPath = $this->option('json-source');
+
+        if (! file_exists($jsonPath)) {
+            $this->error("JSON dump not found at: {$jsonPath}");
+
+            return self::FAILURE;
+        }
+
+        $this->line("  JSON source: {$jsonPath}");
+
+        $dump = json_decode(file_get_contents($jsonPath), true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $this->error('Failed to parse JSON dump: '.json_last_error_msg());
+
+            return self::FAILURE;
+        }
+
+        $tables = $this->getOrderedTables();
+        $dumpTables = array_keys($dump);
+        $tables = array_values(array_filter($tables, fn ($t) => in_array($t, $dumpTables, true)));
+
+        if ($this->option('fresh')) {
+            $this->truncatePgTables($tables);
+        }
+
+        $totalRows = 0;
+        $verification = [];
+
+        foreach ($tables as $table) {
+            try {
+                $pgCount = DB::connection(self::PGSQL_CONN)->table($table)->count();
+                if (! $this->option('fresh') && $pgCount > 0) {
+                    $this->line("  <fg=gray>{$table}: already has data (skipped)</>");
+
+                    continue;
+                }
+
+                $rows = $dump[$table];
+                if (empty($rows)) {
+                    $this->line("  <fg=gray>{$table}: 0 rows (skipped)</>");
+                    $verification[$table] = ['source' => 0, 'target' => $pgCount];
+
+                    continue;
+                }
+
+                $pgColumns = $this->getPgColumns($table);
+                $this->normalizeRows($rows, $pgColumns);
+
+                $this->disableForeignKeys();
+
+                foreach (array_chunk($rows, 500) as $chunk) {
+                    DB::connection(self::PGSQL_CONN)->table($table)->insert($chunk);
+                }
+
+                $this->enableForeignKeys();
+                $this->resetSequence($table);
+
+                $count = count($rows);
                 $this->line("  <fg=green>{$table}: {$count} rows</>");
+                $verification[$table] = ['source' => $count, 'target' => $count];
                 $totalRows += $count;
             } catch (\Exception $e) {
                 $this->warn("  <fg=yellow>{$table}: failed — {$e->getMessage()}</>");
@@ -92,20 +189,35 @@ class MigrateSqliteToPostgres extends Command
 
         $this->info("Migration complete. {$totalRows} total rows migrated.");
 
-        return self::SUCCESS;
+        return $this->verifyAndReport($verification);
     }
 
-    private function getMigratableTables(): array
+    private function verifyAndReport(array $verification): int
     {
-        $allTables = collect(Schema::connection(self::SQLITE_CONN)->getTableListing())
-            ->reject(fn ($t) => $t === 'migrations')
-            ->map(fn ($t) => str_replace('main.', '', $t))
-            ->unique()
-            ->values()
-            ->toArray();
+        $this->line('');
+        $this->line('Verification:');
+        $anyFailure = false;
 
-        $ordered = [];
+        foreach ($verification as $table => $counts) {
+            $match = $counts['source'] === $counts['target'];
+            if (! $match) {
+                $anyFailure = true;
+            }
+            $status = $match ? '<fg=green>PASS</>' : '<fg=red>FAIL</>';
+            $this->line("  {$table}: {$counts['source']} → {$counts['target']}  {$status}");
+        }
 
+        if ($anyFailure) {
+            $this->warn('Some tables have row count mismatches.');
+        } else {
+            $this->info('All tables verified.');
+        }
+
+        return $anyFailure ? self::FAILURE : self::SUCCESS;
+    }
+
+    private function getOrderedTables(): array
+    {
         $priority = [
             'users',
             'password_reset_tokens',
@@ -124,19 +236,48 @@ class MigrateSqliteToPostgres extends Command
             'failed_jobs',
         ];
 
-        foreach ($priority as $table) {
-            if (in_array($table, $allTables, true)) {
-                $ordered[] = $table;
+        return $priority;
+    }
+
+    private function truncatePgTables(array $tables): void
+    {
+        $this->line('  Truncating PostgreSQL tables...');
+        $this->disableForeignKeys();
+        foreach (array_reverse($tables) as $table) {
+            if (Schema::connection(self::PGSQL_CONN)->hasTable($table)) {
+                DB::connection(self::PGSQL_CONN)->table($table)->truncate();
             }
         }
+        $this->enableForeignKeys();
+    }
 
-        foreach ($allTables as $table) {
-            if (! in_array($table, $ordered, true)) {
-                $ordered[] = $table;
-            }
+    private function isValidSqliteFile(string $path): bool
+    {
+        $header = @file_get_contents($path, false, null, 0, 16);
+
+        return $header !== false && str_starts_with($header, 'SQLite format 3');
+    }
+
+    private function getPgColumns(string $table): array
+    {
+        if (! Schema::connection(self::PGSQL_CONN)->hasTable($table)) {
+            return [];
         }
 
-        return $ordered;
+        return Schema::connection(self::PGSQL_CONN)->getColumnListing($table);
+    }
+
+    private function normalizeRows(array &$rows, array $pgColumns): void
+    {
+        if (empty($pgColumns)) {
+            return;
+        }
+
+        $pgLookup = array_flip($pgColumns);
+
+        foreach ($rows as &$row) {
+            $row = array_intersect_key($row, $pgLookup);
+        }
     }
 
     private function disableForeignKeys(): void
@@ -151,6 +292,10 @@ class MigrateSqliteToPostgres extends Command
 
     private function resetSequence(string $table): void
     {
+        if (! Schema::connection(self::PGSQL_CONN)->hasTable($table)) {
+            return;
+        }
+
         if (! Schema::connection(self::PGSQL_CONN)->hasColumn($table, 'id')) {
             return;
         }
