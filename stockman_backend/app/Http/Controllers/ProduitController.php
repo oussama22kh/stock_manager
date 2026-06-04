@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Concerns\Searchable;
 use App\Models\Emplacement;
 use App\Models\Product;
 use App\Models\StockMovement;
@@ -11,16 +12,14 @@ use Illuminate\Http\Request;
 
 class ProduitController extends Controller
 {
+    use Searchable;
+
     public function index(Request $request): JsonResponse
     {
         $query = Product::query();
 
         if ($request->search) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('barcode', 'like', "%{$search}%");
-            });
+            $this->applyWordPrefixSearch($query, $request->search, 'name', 'barcode');
         }
 
         $produits = $query->with('emplacements', 'emplacements.warehouse')->get()->map(function ($product) {

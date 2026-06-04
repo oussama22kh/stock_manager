@@ -27,7 +27,8 @@ FROM php:8.4-apache
 
 RUN apt-get update && apt-get install -y \
     libsqlite3-dev \
-    && docker-php-ext-install pdo pdo_sqlite \
+    libpq-dev \
+    && docker-php-ext-install pdo pdo_sqlite pdo_pgsql \
     && docker-php-ext-configure pdo_sqlite \
     && a2enmod rewrite \
     && rm -rf /var/lib/apt/lists/*

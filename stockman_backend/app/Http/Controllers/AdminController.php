@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Concerns\Searchable;
 use App\Models\Emplacement;
 use App\Models\Product;
 use App\Models\User;
@@ -16,6 +17,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminController extends Controller
 {
+    use Searchable;
     // ─── Users ───
 
     public function users(Request $request): JsonResponse
@@ -219,10 +221,7 @@ class AdminController extends Controller
         $query = Product::with('emplacements', 'emplacements.warehouse');
 
         if ($search = $request->get('search')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('barcode', 'like', "%{$search}%");
-            });
+            $this->applyWordPrefixSearch($query, $search, 'name', 'barcode');
         }
 
         return response()->json($query->paginate(20));
@@ -778,10 +777,7 @@ class AdminController extends Controller
         if ($request->boolean('all_matching')) {
             $query = Product::query();
             if ($search = $request->get('search')) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('name', 'like', "%{$search}%")
-                        ->orWhere('barcode', 'like', "%{$search}%");
-                });
+                $this->applyWordPrefixSearch($query, $search, 'name', 'barcode');
             }
             $count = $query->delete();
 
@@ -926,10 +922,7 @@ class AdminController extends Controller
 
         if ($request->boolean('all_matching')) {
             if ($search = $request->get('search')) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('name', 'like', "%{$search}%")
-                        ->orWhere('barcode', 'like', "%{$search}%");
-                });
+                $this->applyWordPrefixSearch($query, $search, 'name', 'barcode');
             }
         } else {
             $query->whereIn('id', $request->ids);
