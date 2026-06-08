@@ -44,6 +44,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8765:80"
+    environment:
+      BACKEND_HOST: "${BACKEND_HOST:-backend}"
+      BACKEND_PORT: "${BACKEND_PORT:-80}"
     depends_on:
       - backend
     restart: unless-stopped
